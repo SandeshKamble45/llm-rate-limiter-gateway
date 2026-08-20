@@ -2,7 +2,9 @@
   "name": "llm-rate-limiter-gateway",
   "image": "mcr.microsoft.com/devcontainers/java:17",
   "features": {
-    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "moby" : false
+    },
     "ghcr.io/devcontainers/features/java:1": {
       "version": "17",
       "installMaven": "true"
