@@ -1,0 +1,42 @@
+spring:
+  application:
+    name: llm-rate-limiter-gateway
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+ratelimit:
+  token-bucket:
+    capacity: 10000          # max tokens a tenant can burst
+    refill-rate-per-sec: 50  # sustained tokens/sec allowed
+  sliding-window:
+    window-seconds: 60
+    max-requests: 100
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      primaryLlm:
+        sliding-window-size: 20
+        failure-rate-threshold: 40          # trip open if 40% of last 20 calls fail
+        wait-duration-in-open-state: 10s    # stay open 10s before trying again
+        permitted-number-of-calls-in-half-open-state: 5
+        automatic-transition-from-open-to-half-open-enabled: true
+  retry:
+    instances:
+      primaryLlm:
+        max-attempts: 2
+        wait-duration: 200ms
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus,circuitbreakers
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    tags:
+      application: ${spring.application.name}
