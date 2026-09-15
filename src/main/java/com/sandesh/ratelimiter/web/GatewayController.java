@@ -13,6 +13,8 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/v1/gateway")
 public class GatewayController {
 
+    private static final int MAX_PROMPT_LENGTH = 10_000;
+
     private final TokenBucketRateLimiter tokenBucketLimiter;
     private final SlidingWindowRateLimiter slidingWindowLimiter;
     private final TenantQuotaService quotaService;
@@ -29,39 +31,88 @@ public class GatewayController {
         this.llmProviderClient = llmProviderClient;
     }
 
-    public record ChatRequest(String tenantId, String prompt) {
+    public record ChatRequest(
+            String tenantId,
+            String prompt) {
     }
 
     @PostMapping("/chat")
-    public ResponseEntity<?> chat(@RequestBody ChatRequest request) {
+    public ResponseEntity<?> chat(
+            @RequestBody ChatRequest request) {
 
-        String tenantId = request.tenantId();
-        String tenantKey = tenantId + ":default-model";
+        /*
+         * Validate the request before consuming any rate-limit
+         * or budget capacity.
+         */
+        if (request == null) {
+            return ResponseEntity.badRequest()
+                    .body("Request body is required");
+        }
+
+        if (request.tenantId() == null
+                || request.tenantId().isBlank()) {
+
+            return ResponseEntity.badRequest()
+                    .body("tenantId is required");
+        }
+
+        if (request.prompt() == null
+                || request.prompt().isBlank()) {
+
+            return ResponseEntity.badRequest()
+                    .body("prompt is required");
+        }
+
+        if (request.prompt().length() > MAX_PROMPT_LENGTH) {
+
+            return ResponseEntity.badRequest()
+                    .body(
+                            "prompt cannot exceed "
+                                    + MAX_PROMPT_LENGTH
+                                    + " characters"
+                    );
+        }
+
+        String tenantId = request.tenantId().trim();
+        String prompt = request.prompt();
+
+        String tenantKey =
+                tenantId + ":default-model";
 
         /*
          * Layer 1: request-rate protection.
          *
          * Sliding window answers:
-         * "Has this tenant sent too many requests in the current
-         * rolling time window?"
+         *
+         * "Has this tenant sent too many requests
+         *  within the current rolling time window?"
          */
         RateLimitResult requestRateResult =
                 slidingWindowLimiter.tryConsume(tenantId);
 
         if (!requestRateResult.allowed()) {
-            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+            return ResponseEntity.status(
+                            HttpStatus.TOO_MANY_REQUESTS)
                     .body(requestRateResult);
         }
 
         /*
          * Layer 2: token-based protection.
          *
-         * Estimate the request's token cost before calling the provider.
-         * This is intentionally a rough estimate for the current mock
-         * implementation. Real tokenizer integration comes later.
+         * Estimate the request's token cost before
+         * calling the provider.
+         *
+         * This is intentionally a rough estimate for
+         * the current mock implementation.
+         *
+         * Real tokenizer integration will replace this
+         * calculation later.
          */
         long estimatedTokens =
-                Math.max(1, request.prompt().length() / 4);
+                Math.max(
+                        1,
+                        prompt.length() / 4
+                );
 
         RateLimitResult tokenRateResult =
                 tokenBucketLimiter.tryConsume(
@@ -70,50 +121,57 @@ public class GatewayController {
                 );
 
         if (!tokenRateResult.allowed()) {
-            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+            return ResponseEntity.status(
+                            HttpStatus.TOO_MANY_REQUESTS)
                     .body(tokenRateResult);
         }
 
         /*
          * Layer 3: daily financial budget.
          *
-         * Reserve the estimated cost atomically before making the
-         * external LLM call.
+         * Reserve the estimated cost atomically before
+         * making the external LLM call.
          *
-         * Current scaffold:
-         * 1 token = 1.5 cents / 1000 tokens.
+         * Current scaffold pricing:
          *
-         * This pricing is temporary and will be replaced by
-         * model-specific pricing later.
+         * 1.5 USD cents / 1000 tokens.
+         *
+         * This pricing is temporary and will eventually
+         * be replaced by model-specific pricing.
          */
         long estimatedCostMicrodollars =
-                estimateCostMicrodollars(estimatedTokens);
+                estimateCostMicrodollars(
+                        estimatedTokens
+                );
 
-        TenantQuotaService.BudgetReservationResult budgetResult =
+        TenantQuotaService.BudgetReservationResult
+                budgetResult =
                 quotaService.reserveBudget(
                         tenantId,
                         estimatedCostMicrodollars
                 );
 
         if (!budgetResult.allowed()) {
-            return ResponseEntity.status(HttpStatus.PAYMENT_REQUIRED)
+            return ResponseEntity.status(
+                            HttpStatus.PAYMENT_REQUIRED)
                     .body(budgetResult);
         }
 
         /*
          * Layer 4: call the LLM provider.
          *
-         * Resilience4j circuit breaker + retry are currently handled
-         * inside LlmProviderClient.
+         * Resilience4j circuit breaker and retry
+         * are currently handled inside LlmProviderClient.
          */
         LlmProviderClient.LlmResponse response =
                 llmProviderClient.callPrimaryModel(
-                        request.prompt()
+                        prompt
                 );
 
         /*
-         * Actual usage settlement will be implemented after we introduce
-         * provider-specific token usage and model pricing.
+         * Actual usage settlement will be introduced
+         * after provider-specific token usage and
+         * model pricing are implemented.
          */
         return ResponseEntity.ok(response);
     }
@@ -123,17 +181,17 @@ public class GatewayController {
      *
      * Current scaffold pricing:
      *
-     * 1.5 USD cents / 1000 tokens
+     * 1.5 USD cents / 1000 tokens.
      *
-     * Convert that to microdollars:
+     * Conversion:
      *
-     * 1 USD = 1,000,000 microdollars
-     * 1 USD cent = 10,000 microdollars
-     * 1.5 cents = 15,000 microdollars
+     * 1 USD       = 1,000,000 microdollars
+     * 1 USD cent  = 10,000 microdollars
+     * 1.5 cents   = 15,000 microdollars
      *
      * Therefore:
      *
-     * cost = tokens * 15,000 / 1000
+     * cost = tokens * 15,000 / 1,000
      */
     private long estimateCostMicrodollars(long tokens) {
         return Math.max(
@@ -143,8 +201,9 @@ public class GatewayController {
     }
 
     /*
-     * Expose the token bucket independently so that we can benchmark
-     * the algorithm without invoking the LLM provider.
+     * Expose the token bucket independently so that
+     * we can benchmark the algorithm without invoking
+     * the LLM provider.
      */
     @PostMapping("/check/token-bucket")
     public RateLimitResult checkTokenBucket(
@@ -158,13 +217,15 @@ public class GatewayController {
     }
 
     /*
-     * Expose the sliding window independently so that we can benchmark
-     * and compare both algorithms.
+     * Expose the sliding window independently so that
+     * we can benchmark and compare both algorithms.
      */
     @PostMapping("/check/sliding-window")
     public RateLimitResult checkSlidingWindow(
             @RequestParam String tenantId) {
 
-        return slidingWindowLimiter.tryConsume(tenantId);
+        return slidingWindowLimiter.tryConsume(
+                tenantId
+        );
     }
 }
