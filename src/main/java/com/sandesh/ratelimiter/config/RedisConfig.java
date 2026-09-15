@@ -14,15 +14,24 @@ import java.util.List;
 @Configuration
 public class RedisConfig {
 
-    @Bean
+   @Bean
     public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory factory) {
         RedisTemplate<String, Object> template = new RedisTemplate<>();
+
+        StringRedisSerializer stringSerializer = new StringRedisSerializer();
+
         template.setConnectionFactory(factory);
-        template.setKeySerializer(new StringRedisSerializer());
-        template.setHashKeySerializer(new StringRedisSerializer());
+
+        template.setKeySerializer(stringSerializer);
+        template.setValueSerializer(stringSerializer);
+
+        template.setHashKeySerializer(stringSerializer);
+        template.setHashValueSerializer(stringSerializer);
+
+        template.afterPropertiesSet();
+
         return template;
     }
-
     // Loaded once, reused for every call — avoids re-sending the script body
     // on every request (Redis caches by SHA, but this keeps intent explicit).
     @Bean

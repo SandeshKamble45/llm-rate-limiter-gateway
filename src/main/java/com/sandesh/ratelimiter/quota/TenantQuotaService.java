@@ -135,6 +135,10 @@ public class TenantQuotaService {
                 + utcDate;
     }
 
+    void clearForTesting(String tenantId) {
+         redisTemplate.delete(dailyKey(tenantId));
+    }
+
     public record BudgetReservationResult(
             boolean allowed,
             long spentMicrodollars,
