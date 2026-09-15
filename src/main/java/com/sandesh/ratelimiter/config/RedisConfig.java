@@ -40,4 +40,12 @@ public class RedisConfig {
         script.setResultType(List.class);
         return script;
     }
+
+    @Bean
+    public DefaultRedisScript<List> budgetReservationScript() {
+    DefaultRedisScript<List> script = new DefaultRedisScript<>();
+    script.setLocation(new ClassPathResource("scripts/budget_reservation.lua"));
+    script.setResultType(List.class);
+    return script;
+}
 }
