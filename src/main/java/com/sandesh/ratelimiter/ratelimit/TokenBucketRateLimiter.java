@@ -37,6 +37,17 @@ public class TokenBucketRateLimiter {
      *                      true up with actual usage after the LLM call returns)
      */
     public RateLimitResult tryConsume(String tenantKey, long requestedCost) {
+
+        if (requestedCost <= 0) {
+            throw new IllegalArgumentException(
+                "Requested token cost must be greater than zero");
+        }
+
+        if (requestedCost > capacity) {
+            throw new IllegalArgumentException(
+                    "Requested token cost cannot exceed bucket capacity");
+        }
+
         String redisKey = "ratelimit:tb:" + tenantKey;
         double now = System.currentTimeMillis() / 1000.0;
 
@@ -51,6 +62,13 @@ public class TokenBucketRateLimiter {
 
         boolean allowed = result.get(0) == 1L;
         double remaining = result.get(1);
-        return new RateLimitResult(allowed, remaining, "token-bucket");
+        long retryAfterSeconds = result.get(2);
+        
+        return new RateLimitResult(
+        allowed,
+        remaining,
+        "token-bucket",
+        retryAfterSeconds
+        );
     }
 }

@@ -1,45 +1,104 @@
 -- Atomic token bucket, executed inside Redis so concurrent gateway instances
--- never race on read-then-write. This is the piece you'll be asked to explain
--- in a systems design interview: WHY does this need to be a Lua script and not
--- three separate Redis calls from Java?
--- Answer: GET capacity -> compute -> SET is a classic check-then-act race.
--- Two instances can both read "5 tokens left", both allow the request, and you've
--- now let through double what the bucket permits. Lua scripts run atomically on
--- the Redis server (single-threaded), so this whole block is one indivisible step.
-
--- KEYS[1] = bucket key, e.g. "ratelimit:tenant123:gpt-4"
--- ARGV[1] = capacity (max tokens the bucket can hold)
--- ARGV[2] = refill_rate (tokens added per second)
--- ARGV[3] = requested_tokens (cost of this request, e.g. prompt+completion tokens)
--- ARGV[4] = now (unix timestamp, seconds, as float)
+-- never race on read-then-write.
+--
+-- The entire operation is atomic because Redis executes this Lua script
+-- as one indivisible operation.
+--
+-- KEYS[1] = bucket key
+--
+-- ARGV[1] = capacity
+-- ARGV[2] = refill rate (tokens per second)
+-- ARGV[3] = requested tokens
+--
+-- Return:
+--   { allowed, remaining_tokens, retry_after_seconds }
 
 local key = KEYS[1]
+
 local capacity = tonumber(ARGV[1])
 local refill_rate = tonumber(ARGV[2])
 local requested = tonumber(ARGV[3])
-local now = tonumber(ARGV[4])
 
-local bucket = redis.call("HMGET", key, "tokens", "last_refill")
+-- Redis is the authoritative clock.
+local redis_time = redis.call("TIME")
+local now_seconds = tonumber(redis_time[1])
+local now_microseconds = tonumber(redis_time[2])
+
+local now = now_seconds + (now_microseconds / 1000000)
+
+local bucket = redis.call(
+    "HMGET",
+    key,
+    "tokens",
+    "last_refill"
+)
+
 local tokens = tonumber(bucket[1])
 local last_refill = tonumber(bucket[2])
 
+-- First request for this bucket.
 if tokens == nil then
     tokens = capacity
     last_refill = now
 end
 
--- Refill based on elapsed time since last request
-local elapsed = math.max(0, now - last_refill)
-tokens = math.min(capacity, tokens + (elapsed * refill_rate))
+-- Refill tokens based on elapsed time.
+local elapsed = math.max(
+    0,
+    now - last_refill
+)
+
+tokens = math.min(
+    capacity,
+    tokens + (elapsed * refill_rate)
+)
 
 local allowed = 0
+local retry_after_seconds = 0
+
 if tokens >= requested then
+
+    -- Enough tokens are available.
     tokens = tokens - requested
     allowed = 1
+
+else
+
+    -- Not enough tokens are available.
+    --
+    -- Calculate how long it takes to accumulate
+    -- the missing tokens.
+    local missing_tokens = requested - tokens
+
+    if refill_rate > 0 then
+        retry_after_seconds = math.ceil(
+            missing_tokens / refill_rate
+        )
+    else
+        retry_after_seconds = -1
+    end
+
 end
 
-redis.call("HMSET", key, "tokens", tokens, "last_refill", now)
--- Let the bucket expire if unused for a while, so idle tenants don't leak memory
-redis.call("EXPIRE", key, 3600)
+-- Persist bucket state.
+redis.call(
+    "HSET",
+    key,
+    "tokens",
+    tokens,
+    "last_refill",
+    now
+)
 
-return { allowed, tokens }
+-- Remove idle buckets after one hour.
+redis.call(
+    "EXPIRE",
+    key,
+    3600
+)
+
+return {
+    allowed,
+    tokens,
+    retry_after_seconds
+}
