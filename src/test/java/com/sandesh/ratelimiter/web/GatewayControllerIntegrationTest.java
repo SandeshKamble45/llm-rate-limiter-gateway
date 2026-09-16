@@ -131,10 +131,14 @@ class GatewayControllerIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(
                         content().json("""
-                                {
-                                  "modelUsed": "mock-model",
-                                  "completion": "mock response",
-                                  "tokensUsed": 10
+                                 {
+                                        "modelUsed": "mock-model",
+                                        "completion": "mock response",
+                                        "usage": {
+                                        "inputTokens": 10,
+                                        "outputTokens": 0,
+                                        "totalTokens": 10
+                                }
                                 }
                                 """));
     }
@@ -236,9 +240,9 @@ class GatewayControllerIntegrationTest {
                 .andExpect(status().isTooManyRequests());
     }
 
-    @Test
-    void shouldUseTokenCounterForTokenBucketCost()
-            throws Exception {
+        @Test
+        void shouldUseTokenCounterForTokenBucketCost()
+                throws Exception {
 
         String prompt =
                 "This is a deliberately longer prompt so that "
@@ -263,9 +267,9 @@ class GatewayControllerIntegrationTest {
                                         MediaType.APPLICATION_JSON)
                                 .content("""
                                         {
-                                          "tenantId":
-                                            "token-count-tenant",
-                                          "prompt": "%s"
+                                        "tenantId":
+                                                "token-count-tenant",
+                                        "prompt": "%s"
                                         }
                                         """.formatted(prompt)))
                 .andExpect(status().isOk())
@@ -273,8 +277,14 @@ class GatewayControllerIntegrationTest {
                         content().json(
                                 """
                                 {
-                                  "tokensUsed": %d
+                                "usage": {
+                                        "inputTokens": %d,
+                                        "outputTokens": 0,
+                                        "totalTokens": %d
                                 }
-                                """.formatted(expectedTokens)));
-    }
+                                }
+                                """.formatted(
+                                        expectedTokens,
+                                        expectedTokens)));
+        }
 }
