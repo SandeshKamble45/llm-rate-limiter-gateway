@@ -1,6 +1,7 @@
 package com.sandesh.ratelimiter.web;
 
 import com.sandesh.ratelimiter.llm.LlmProviderClient;
+import com.sandesh.ratelimiter.llm.TokenCounter;
 import com.sandesh.ratelimiter.model.RateLimitResult;
 import com.sandesh.ratelimiter.quota.TenantQuotaService;
 import com.sandesh.ratelimiter.ratelimit.SlidingWindowRateLimiter;
@@ -19,31 +20,25 @@ public class GatewayController {
     private final SlidingWindowRateLimiter slidingWindowLimiter;
     private final TenantQuotaService quotaService;
     private final LlmProviderClient llmProviderClient;
+    private final TokenCounter tokenCounter;
 
     public GatewayController(
             TokenBucketRateLimiter tokenBucketLimiter,
             SlidingWindowRateLimiter slidingWindowLimiter,
             TenantQuotaService quotaService,
-            LlmProviderClient llmProviderClient) {
+            LlmProviderClient llmProviderClient,
+            TokenCounter tokenCounter) {
         this.tokenBucketLimiter = tokenBucketLimiter;
         this.slidingWindowLimiter = slidingWindowLimiter;
         this.quotaService = quotaService;
         this.llmProviderClient = llmProviderClient;
+        this.tokenCounter = tokenCounter;
     }
 
-    public record ChatRequest(
-            String tenantId,
-            String prompt) {
-    }
+    public record ChatRequest(String tenantId, String prompt) {}
 
     @PostMapping("/chat")
-    public ResponseEntity<?> chat(
-            @RequestBody ChatRequest request) {
-
-        /*
-         * Validate the request before consuming any rate-limit
-         * or budget capacity.
-         */
+    public ResponseEntity<?> chat(@RequestBody ChatRequest request) {
         if (request == null) {
             return ResponseEntity.badRequest()
                     .body("Request body is required");
@@ -51,181 +46,84 @@ public class GatewayController {
 
         if (request.tenantId() == null
                 || request.tenantId().isBlank()) {
-
             return ResponseEntity.badRequest()
                     .body("tenantId is required");
         }
 
         if (request.prompt() == null
                 || request.prompt().isBlank()) {
-
             return ResponseEntity.badRequest()
                     .body("prompt is required");
         }
 
         if (request.prompt().length() > MAX_PROMPT_LENGTH) {
-
             return ResponseEntity.badRequest()
-                    .body(
-                            "prompt cannot exceed "
-                                    + MAX_PROMPT_LENGTH
-                                    + " characters"
-                    );
+                    .body("prompt cannot exceed "
+                            + MAX_PROMPT_LENGTH
+                            + " characters");
         }
 
         String tenantId = request.tenantId().trim();
         String prompt = request.prompt();
 
-        String tenantKey =
-                tenantId + ":default-model";
+        String tenantKey = tenantId + ":default-model";
 
-        /*
-         * Layer 1: request-rate protection.
-         *
-         * Sliding window answers:
-         *
-         * "Has this tenant sent too many requests
-         *  within the current rolling time window?"
-         */
         RateLimitResult requestRateResult =
                 slidingWindowLimiter.tryConsume(tenantId);
 
         if (!requestRateResult.allowed()) {
-            return ResponseEntity.status(
-                            HttpStatus.TOO_MANY_REQUESTS)
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
                     .body(requestRateResult);
         }
 
-        /*
-         * Layer 2: token-based protection.
-         *
-         * Estimate the request's token cost before
-         * calling the provider.
-         *
-         * This is intentionally a rough estimate for
-         * the current mock implementation.
-         *
-         * Real tokenizer integration will replace this
-         * calculation later.
-         */
         long estimatedTokens =
-                Math.max(
-                        1,
-                        prompt.length() / 4
-                );
+                Math.max(1, tokenCounter.countTokens(prompt));
 
         RateLimitResult tokenRateResult =
                 tokenBucketLimiter.tryConsume(
                         tenantKey,
-                        estimatedTokens
-                );
+                        estimatedTokens);
 
         if (!tokenRateResult.allowed()) {
-            return ResponseEntity.status(
-                            HttpStatus.TOO_MANY_REQUESTS)
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
                     .body(tokenRateResult);
         }
 
-        /*
-         * Layer 3: daily financial budget.
-         *
-         * Reserve the estimated cost atomically before
-         * making the external LLM call.
-         *
-         * Current scaffold pricing:
-         *
-         * 1.5 USD cents / 1000 tokens.
-         *
-         * This pricing is temporary and will eventually
-         * be replaced by model-specific pricing.
-         */
         long estimatedCostMicrodollars =
-                estimateCostMicrodollars(
-                        estimatedTokens
-                );
+                estimateCostMicrodollars(estimatedTokens);
 
-        TenantQuotaService.BudgetReservationResult
-                budgetResult =
+        TenantQuotaService.BudgetReservationResult budgetResult =
                 quotaService.reserveBudget(
                         tenantId,
-                        estimatedCostMicrodollars
-                );
+                        estimatedCostMicrodollars);
 
         if (!budgetResult.allowed()) {
-            return ResponseEntity.status(
-                            HttpStatus.PAYMENT_REQUIRED)
+            return ResponseEntity.status(HttpStatus.PAYMENT_REQUIRED)
                     .body(budgetResult);
         }
 
-        /*
-         * Layer 4: call the LLM provider.
-         *
-         * Resilience4j circuit breaker and retry
-         * are currently handled inside LlmProviderClient.
-         */
         LlmProviderClient.LlmResponse response =
-                llmProviderClient.callPrimaryModel(
-                        prompt
-                );
+                llmProviderClient.callPrimaryModel(prompt);
 
-        /*
-         * Actual usage settlement will be introduced
-         * after provider-specific token usage and
-         * model pricing are implemented.
-         */
         return ResponseEntity.ok(response);
     }
 
-    /*
-     * Temporary cost estimation for the mock implementation.
-     *
-     * Current scaffold pricing:
-     *
-     * 1.5 USD cents / 1000 tokens.
-     *
-     * Conversion:
-     *
-     * 1 USD       = 1,000,000 microdollars
-     * 1 USD cent  = 10,000 microdollars
-     * 1.5 cents   = 15,000 microdollars
-     *
-     * Therefore:
-     *
-     * cost = tokens * 15,000 / 1,000
-     */
     private long estimateCostMicrodollars(long tokens) {
         return Math.max(
                 1,
-                (tokens * 15_000L) / 1_000L
-        );
+                (tokens * 15_000L) / 1_000L);
     }
 
-    /*
-     * Expose the token bucket independently so that
-     * we can benchmark the algorithm without invoking
-     * the LLM provider.
-     */
     @PostMapping("/check/token-bucket")
     public RateLimitResult checkTokenBucket(
             @RequestParam String tenantId,
             @RequestParam(defaultValue = "1") long cost) {
-
-        return tokenBucketLimiter.tryConsume(
-                tenantId,
-                cost
-        );
+        return tokenBucketLimiter.tryConsume(tenantId, cost);
     }
 
-    /*
-     * Expose the sliding window independently so that
-     * we can benchmark and compare both algorithms.
-     */
     @PostMapping("/check/sliding-window")
     public RateLimitResult checkSlidingWindow(
             @RequestParam String tenantId) {
-
-        return slidingWindowLimiter.tryConsume(
-                tenantId
-        );
+        return slidingWindowLimiter.tryConsume(tenantId);
     }
 }
