@@ -2,16 +2,17 @@ package com.sandesh.ratelimiter.web;
 
 import com.sandesh.ratelimiter.llm.LlmProviderClient;
 import com.sandesh.ratelimiter.llm.TokenCounter;
+import com.sandesh.ratelimiter.metrics.GatewayMetrics;
+import com.sandesh.ratelimiter.model.CircuitBreakerStatus;
 import com.sandesh.ratelimiter.model.RateLimitResult;
+import com.sandesh.ratelimiter.model.SlidingWindowStatus;
+import com.sandesh.ratelimiter.model.TokenBucketStatus;
 import com.sandesh.ratelimiter.pricing.ModelPricing;
 import com.sandesh.ratelimiter.pricing.ModelPricingService;
 import com.sandesh.ratelimiter.quota.BudgetSettlementResult;
 import com.sandesh.ratelimiter.quota.TenantQuotaService;
 import com.sandesh.ratelimiter.ratelimit.SlidingWindowRateLimiter;
 import com.sandesh.ratelimiter.ratelimit.TokenBucketRateLimiter;
-import com.sandesh.ratelimiter.model.SlidingWindowStatus;
-import com.sandesh.ratelimiter.model.TokenBucketStatus;
-import com.sandesh.ratelimiter.model.CircuitBreakerStatus;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import org.springframework.http.HttpStatus;
@@ -31,8 +32,8 @@ public class GatewayController {
         private final LlmProviderClient llmProviderClient;
         private final TokenCounter tokenCounter;
         private final ModelPricingService modelPricingService;
-
         private final CircuitBreakerRegistry circuitBreakerRegistry;
+        private final GatewayMetrics gatewayMetrics;
 
         public GatewayController(
                         TokenBucketRateLimiter tokenBucketLimiter,
@@ -41,7 +42,8 @@ public class GatewayController {
                         LlmProviderClient llmProviderClient,
                         TokenCounter tokenCounter,
                         ModelPricingService modelPricingService,
-                        CircuitBreakerRegistry circuitBreakerRegistry) {
+                        CircuitBreakerRegistry circuitBreakerRegistry,
+                        GatewayMetrics gatewayMetrics) {
 
                 this.tokenBucketLimiter = tokenBucketLimiter;
                 this.slidingWindowLimiter = slidingWindowLimiter;
@@ -50,7 +52,7 @@ public class GatewayController {
                 this.tokenCounter = tokenCounter;
                 this.modelPricingService = modelPricingService;
                 this.circuitBreakerRegistry = circuitBreakerRegistry;
-
+                this.gatewayMetrics = gatewayMetrics;
         }
 
         @GetMapping("/status")
@@ -66,14 +68,11 @@ public class GatewayController {
 
                 String tenantKey = tenant + ":primary-model";
 
-                TokenBucketStatus tokenBucket = tokenBucketLimiter.getStatus(
-                                tenantKey);
+                TokenBucketStatus tokenBucket = tokenBucketLimiter.getStatus(tenantKey);
 
-                SlidingWindowStatus slidingWindow = slidingWindowLimiter.getStatus(
-                                tenant);
+                SlidingWindowStatus slidingWindow = slidingWindowLimiter.getStatus(tenant);
 
-                TenantQuotaService.BudgetReservationResult budget = quotaService.getBudgetStatus(
-                                tenant);
+                TenantQuotaService.BudgetReservationResult budget = quotaService.getBudgetStatus(tenant);
 
                 return ResponseEntity.ok(
                                 new GatewayStatusResponse(
@@ -81,7 +80,7 @@ public class GatewayController {
                                                 tokenBucket,
                                                 slidingWindow,
                                                 budget,
-                                        getCircuitBreakerStatus()));
+                                                getCircuitBreakerStatus()));
         }
 
         @PostMapping("/chat")
@@ -114,6 +113,11 @@ public class GatewayController {
                                                         + " characters");
                 }
 
+                /*
+                 * Count valid chat requests entering the rate-limit pipeline.
+                 */
+                gatewayMetrics.recordRequest();
+
                 String tenantId = request.tenantId().trim();
                 String prompt = request.prompt();
 
@@ -127,6 +131,9 @@ public class GatewayController {
                 RateLimitResult requestRateResult = slidingWindowLimiter.tryConsume(tenantId);
 
                 if (!requestRateResult.allowed()) {
+
+                        gatewayMetrics.recordRejectedRequest();
+
                         return ResponseEntity.status(
                                         HttpStatus.TOO_MANY_REQUESTS)
                                         .body(requestRateResult);
@@ -150,6 +157,9 @@ public class GatewayController {
                                 estimatedInputTokens);
 
                 if (!tokenRateResult.allowed()) {
+
+                        gatewayMetrics.recordRejectedRequest();
+
                         return ResponseEntity.status(
                                         HttpStatus.TOO_MANY_REQUESTS)
                                         .body(tokenRateResult);
@@ -184,6 +194,18 @@ public class GatewayController {
                                         .body(budgetReservation);
                 }
 
+                /*
+                 * Step 6:
+                 * Call the LLM provider.
+                 *
+                 * The latency timer covers the provider operation,
+                 * including retry/fallback processing performed
+                 * inside LlmProviderClient.
+                 */
+                gatewayMetrics.recordLlmCall();
+
+                long llmStartNanos = System.nanoTime();
+
                 LlmProviderClient.LlmResponse response;
 
                 try {
@@ -192,8 +214,16 @@ public class GatewayController {
 
                 } catch (RuntimeException exception) {
 
-                        // The budget was reserved before the provider call.
-                        // Release that reservation because no provider usage occurred.
+                        gatewayMetrics.recordLlmFailure();
+
+                        gatewayMetrics.recordLlmLatency(
+                                        System.nanoTime() - llmStartNanos);
+
+                        /*
+                         * The budget was reserved before the provider call.
+                         * Release that reservation because no provider usage
+                         * occurred.
+                         */
                         BudgetSettlementResult settlement = quotaService.settleBudget(
                                         tenantId,
                                         estimatedReservation,
@@ -208,6 +238,13 @@ public class GatewayController {
                                                                         settlement));
                 }
 
+                gatewayMetrics.recordLlmLatency(
+                                System.nanoTime() - llmStartNanos);
+
+                /*
+                 * Step 7:
+                 * Calculate actual provider usage and cost.
+                 */
                 ModelPricing actualPricing = modelPricingService.getPricing(
                                 response.modelUsed());
 
@@ -219,6 +256,21 @@ public class GatewayController {
 
                 long actualCost = actualInputCost + actualOutputCost;
 
+                /*
+                 * Record actual token usage.
+                 */
+                gatewayMetrics.recordTokens(
+                                response.usage().totalTokens());
+
+                /*
+                 * Record actual calculated cost.
+                 */
+                gatewayMetrics.recordActualCost(actualCost);
+
+                /*
+                 * Step 8:
+                 * Settle the budget reservation using actual usage.
+                 */
                 BudgetSettlementResult settlement = quotaService.settleBudget(
                                 tenantId,
                                 estimatedReservation,
