@@ -3,9 +3,17 @@ package com.sandesh.ratelimiter.web;
 import com.sandesh.ratelimiter.llm.LlmProviderClient;
 import com.sandesh.ratelimiter.llm.TokenCounter;
 import com.sandesh.ratelimiter.model.RateLimitResult;
+import com.sandesh.ratelimiter.pricing.ModelPricing;
+import com.sandesh.ratelimiter.pricing.ModelPricingService;
+import com.sandesh.ratelimiter.quota.BudgetSettlementResult;
 import com.sandesh.ratelimiter.quota.TenantQuotaService;
 import com.sandesh.ratelimiter.ratelimit.SlidingWindowRateLimiter;
 import com.sandesh.ratelimiter.ratelimit.TokenBucketRateLimiter;
+import com.sandesh.ratelimiter.model.SlidingWindowStatus;
+import com.sandesh.ratelimiter.model.TokenBucketStatus;
+import com.sandesh.ratelimiter.model.CircuitBreakerStatus;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -14,116 +22,272 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/v1/gateway")
 public class GatewayController {
 
-    private static final int MAX_PROMPT_LENGTH = 10_000;
+        private static final int MAX_PROMPT_LENGTH = 10_000;
+        private static final long MAX_OUTPUT_TOKENS = 150;
 
-    private final TokenBucketRateLimiter tokenBucketLimiter;
-    private final SlidingWindowRateLimiter slidingWindowLimiter;
-    private final TenantQuotaService quotaService;
-    private final LlmProviderClient llmProviderClient;
-    private final TokenCounter tokenCounter;
+        private final TokenBucketRateLimiter tokenBucketLimiter;
+        private final SlidingWindowRateLimiter slidingWindowLimiter;
+        private final TenantQuotaService quotaService;
+        private final LlmProviderClient llmProviderClient;
+        private final TokenCounter tokenCounter;
+        private final ModelPricingService modelPricingService;
 
-    public GatewayController(
-            TokenBucketRateLimiter tokenBucketLimiter,
-            SlidingWindowRateLimiter slidingWindowLimiter,
-            TenantQuotaService quotaService,
-            LlmProviderClient llmProviderClient,
-            TokenCounter tokenCounter) {
-        this.tokenBucketLimiter = tokenBucketLimiter;
-        this.slidingWindowLimiter = slidingWindowLimiter;
-        this.quotaService = quotaService;
-        this.llmProviderClient = llmProviderClient;
-        this.tokenCounter = tokenCounter;
-    }
+        private final CircuitBreakerRegistry circuitBreakerRegistry;
 
-    public record ChatRequest(String tenantId, String prompt) {}
+        public GatewayController(
+                        TokenBucketRateLimiter tokenBucketLimiter,
+                        SlidingWindowRateLimiter slidingWindowLimiter,
+                        TenantQuotaService quotaService,
+                        LlmProviderClient llmProviderClient,
+                        TokenCounter tokenCounter,
+                        ModelPricingService modelPricingService,
+                        CircuitBreakerRegistry circuitBreakerRegistry) {
 
-    @PostMapping("/chat")
-    public ResponseEntity<?> chat(@RequestBody ChatRequest request) {
-        if (request == null) {
-            return ResponseEntity.badRequest()
-                    .body("Request body is required");
+                this.tokenBucketLimiter = tokenBucketLimiter;
+                this.slidingWindowLimiter = slidingWindowLimiter;
+                this.quotaService = quotaService;
+                this.llmProviderClient = llmProviderClient;
+                this.tokenCounter = tokenCounter;
+                this.modelPricingService = modelPricingService;
+                this.circuitBreakerRegistry = circuitBreakerRegistry;
+
         }
 
-        if (request.tenantId() == null
-                || request.tenantId().isBlank()) {
-            return ResponseEntity.badRequest()
-                    .body("tenantId is required");
+        @GetMapping("/status")
+        public ResponseEntity<?> getStatus(
+                        @RequestParam String tenantId) {
+
+                if (tenantId == null || tenantId.isBlank()) {
+                        return ResponseEntity.badRequest()
+                                        .body("tenantId is required");
+                }
+
+                String tenant = tenantId.trim();
+
+                String tenantKey = tenant + ":primary-model";
+
+                TokenBucketStatus tokenBucket = tokenBucketLimiter.getStatus(
+                                tenantKey);
+
+                SlidingWindowStatus slidingWindow = slidingWindowLimiter.getStatus(
+                                tenant);
+
+                TenantQuotaService.BudgetReservationResult budget = quotaService.getBudgetStatus(
+                                tenant);
+
+                return ResponseEntity.ok(
+                                new GatewayStatusResponse(
+                                                tenant,
+                                                tokenBucket,
+                                                slidingWindow,
+                                                budget,
+                                        getCircuitBreakerStatus()));
         }
 
-        if (request.prompt() == null
-                || request.prompt().isBlank()) {
-            return ResponseEntity.badRequest()
-                    .body("prompt is required");
+        @PostMapping("/chat")
+        public ResponseEntity<?> chat(
+                        @RequestBody ChatRequest request) {
+
+                if (request == null) {
+                        return ResponseEntity.badRequest()
+                                        .body("Request body is required");
+                }
+
+                if (request.tenantId() == null
+                                || request.tenantId().isBlank()) {
+
+                        return ResponseEntity.badRequest()
+                                        .body("tenantId is required");
+                }
+
+                if (request.prompt() == null
+                                || request.prompt().isBlank()) {
+
+                        return ResponseEntity.badRequest()
+                                        .body("prompt is required");
+                }
+
+                if (request.prompt().length() > MAX_PROMPT_LENGTH) {
+                        return ResponseEntity.badRequest()
+                                        .body("prompt cannot exceed "
+                                                        + MAX_PROMPT_LENGTH
+                                                        + " characters");
+                }
+
+                String tenantId = request.tenantId().trim();
+                String prompt = request.prompt();
+
+                String model = "primary-model";
+                String tenantKey = tenantId + ":" + model;
+
+                /*
+                 * Step 1:
+                 * Enforce request-per-minute limit.
+                 */
+                RateLimitResult requestRateResult = slidingWindowLimiter.tryConsume(tenantId);
+
+                if (!requestRateResult.allowed()) {
+                        return ResponseEntity.status(
+                                        HttpStatus.TOO_MANY_REQUESTS)
+                                        .body(requestRateResult);
+                }
+
+                /*
+                 * Step 2:
+                 * Estimate input tokens before calling the provider.
+                 */
+                long estimatedInputTokens = Math.max(
+                                1,
+                                tokenCounter.countTokens(prompt));
+
+                /*
+                 * Step 3:
+                 * Enforce token-rate limit using the estimated
+                 * input token consumption.
+                 */
+                RateLimitResult tokenRateResult = tokenBucketLimiter.tryConsume(
+                                tenantKey,
+                                estimatedInputTokens);
+
+                if (!tokenRateResult.allowed()) {
+                        return ResponseEntity.status(
+                                        HttpStatus.TOO_MANY_REQUESTS)
+                                        .body(tokenRateResult);
+                }
+
+                /*
+                 * Step 4:
+                 * Determine model pricing.
+                 */
+                ModelPricing pricing = modelPricingService.getPricing(model);
+
+                /*
+                 * Step 5:
+                 * Reserve enough budget for the estimated input
+                 * plus the maximum permitted output.
+                 *
+                 * This protects the daily quota before the external
+                 * provider call happens.
+                 */
+                long estimatedReservation = pricing.calculateInputCost(
+                                estimatedInputTokens)
+                                + pricing.calculateOutputCost(
+                                                MAX_OUTPUT_TOKENS);
+
+                TenantQuotaService.BudgetReservationResult budgetReservation = quotaService.reserveBudget(
+                                tenantId,
+                                estimatedReservation);
+
+                if (!budgetReservation.allowed()) {
+                        return ResponseEntity.status(
+                                        HttpStatus.PAYMENT_REQUIRED)
+                                        .body(budgetReservation);
+                }
+
+                LlmProviderClient.LlmResponse response;
+
+                try {
+
+                        response = llmProviderClient.callPrimaryModel(prompt);
+
+                } catch (RuntimeException exception) {
+
+                        // The budget was reserved before the provider call.
+                        // Release that reservation because no provider usage occurred.
+                        BudgetSettlementResult settlement = quotaService.settleBudget(
+                                        tenantId,
+                                        estimatedReservation,
+                                        0);
+
+                        return ResponseEntity.status(
+                                        HttpStatus.BAD_GATEWAY)
+                                        .body(
+                                                        new GatewayErrorResponse(
+                                                                        "LLM provider unavailable",
+                                                                        estimatedReservation,
+                                                                        settlement));
+                }
+
+                ModelPricing actualPricing = modelPricingService.getPricing(
+                                response.modelUsed());
+
+                long actualInputCost = actualPricing.calculateInputCost(
+                                response.usage().inputTokens());
+
+                long actualOutputCost = actualPricing.calculateOutputCost(
+                                response.usage().outputTokens());
+
+                long actualCost = actualInputCost + actualOutputCost;
+
+                BudgetSettlementResult settlement = quotaService.settleBudget(
+                                tenantId,
+                                estimatedReservation,
+                                actualCost);
+
+                return ResponseEntity.ok(
+                                new GatewayResponse(
+                                                response,
+                                                estimatedReservation,
+                                                actualCost,
+                                                settlement));
         }
 
-        if (request.prompt().length() > MAX_PROMPT_LENGTH) {
-            return ResponseEntity.badRequest()
-                    .body("prompt cannot exceed "
-                            + MAX_PROMPT_LENGTH
-                            + " characters");
+        @PostMapping("/check/token-bucket")
+        public RateLimitResult checkTokenBucket(
+                        @RequestParam String tenantId,
+                        @RequestParam(defaultValue = "1") long cost) {
+
+                return tokenBucketLimiter.tryConsume(
+                                tenantId,
+                                cost);
         }
 
-        String tenantId = request.tenantId().trim();
-        String prompt = request.prompt();
+        @PostMapping("/check/sliding-window")
+        public RateLimitResult checkSlidingWindow(
+                        @RequestParam String tenantId) {
 
-        String tenantKey = tenantId + ":default-model";
-
-        RateLimitResult requestRateResult =
-                slidingWindowLimiter.tryConsume(tenantId);
-
-        if (!requestRateResult.allowed()) {
-            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
-                    .body(requestRateResult);
+                return slidingWindowLimiter.tryConsume(
+                                tenantId);
         }
 
-        long estimatedTokens =
-                Math.max(1, tokenCounter.countTokens(prompt));
+        private CircuitBreakerStatus getCircuitBreakerStatus() {
 
-        RateLimitResult tokenRateResult =
-                tokenBucketLimiter.tryConsume(
-                        tenantKey,
-                        estimatedTokens);
+                CircuitBreaker circuitBreaker = circuitBreakerRegistry
+                                .circuitBreaker("primaryLlm");
 
-        if (!tokenRateResult.allowed()) {
-            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
-                    .body(tokenRateResult);
+                CircuitBreaker.Metrics metrics = circuitBreaker.getMetrics();
+
+                return new CircuitBreakerStatus(
+                                circuitBreaker.getName(),
+                                circuitBreaker.getState().name(),
+                                metrics.getFailureRate(),
+                                metrics.getNumberOfBufferedCalls(),
+                                metrics.getNumberOfFailedCalls());
         }
 
-        long estimatedCostMicrodollars =
-                estimateCostMicrodollars(estimatedTokens);
-
-        TenantQuotaService.BudgetReservationResult budgetResult =
-                quotaService.reserveBudget(
-                        tenantId,
-                        estimatedCostMicrodollars);
-
-        if (!budgetResult.allowed()) {
-            return ResponseEntity.status(HttpStatus.PAYMENT_REQUIRED)
-                    .body(budgetResult);
+        public record ChatRequest(
+                        String tenantId,
+                        String prompt) {
         }
 
-        LlmProviderClient.LlmResponse response =
-                llmProviderClient.callPrimaryModel(prompt);
+        public record GatewayResponse(
+                        LlmProviderClient.LlmResponse response,
+                        long estimatedCostMicrodollars,
+                        long actualCostMicrodollars,
+                        BudgetSettlementResult settlement) {
+        }
 
-        return ResponseEntity.ok(response);
-    }
+        public record GatewayErrorResponse(
+                        String message,
+                        long releasedReservationMicrodollars,
+                        BudgetSettlementResult settlement) {
+        }
 
-    private long estimateCostMicrodollars(long tokens) {
-        return Math.max(
-                1,
-                (tokens * 15_000L) / 1_000L);
-    }
-
-    @PostMapping("/check/token-bucket")
-    public RateLimitResult checkTokenBucket(
-            @RequestParam String tenantId,
-            @RequestParam(defaultValue = "1") long cost) {
-        return tokenBucketLimiter.tryConsume(tenantId, cost);
-    }
-
-    @PostMapping("/check/sliding-window")
-    public RateLimitResult checkSlidingWindow(
-            @RequestParam String tenantId) {
-        return slidingWindowLimiter.tryConsume(tenantId);
-    }
+        public record GatewayStatusResponse(
+                        String tenantId,
+                        TokenBucketStatus tokenBucket,
+                        SlidingWindowStatus slidingWindow,
+                        TenantQuotaService.BudgetReservationResult dailyBudget,
+                        CircuitBreakerStatus circuitBreaker) {
+        }
 }

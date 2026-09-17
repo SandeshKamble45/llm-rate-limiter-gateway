@@ -1,6 +1,7 @@
 package com.sandesh.ratelimiter.ratelimit;
 
 import com.sandesh.ratelimiter.model.RateLimitResult;
+import com.sandesh.ratelimiter.model.TokenBucketStatus;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
@@ -11,7 +12,8 @@ import java.util.List;
 /**
  * Token-based limiting: cost of a request is the number of prompt+completion
  * tokens it consumes, not "1 request". This is what actually matches an LLM's
- * real resource cost — a 4000-token prompt is not the same cost as a 10-token one.
+ * real resource cost — a 4000-token prompt is not the same cost as a 10-token
+ * one.
  */
 @Service
 public class TokenBucketRateLimiter {
@@ -26,7 +28,7 @@ public class TokenBucketRateLimiter {
     private double refillRatePerSec;
 
     public TokenBucketRateLimiter(RedisTemplate<String, Object> redisTemplate,
-                                   DefaultRedisScript<List> tokenBucketScript) {
+            DefaultRedisScript<List> tokenBucketScript) {
         this.redisTemplate = redisTemplate;
         this.tokenBucketScript = tokenBucketScript;
     }
@@ -40,7 +42,7 @@ public class TokenBucketRateLimiter {
 
         if (requestedCost <= 0) {
             throw new IllegalArgumentException(
-                "Requested token cost must be greater than zero");
+                    "Requested token cost must be greater than zero");
         }
 
         if (requestedCost > capacity) {
@@ -57,18 +59,56 @@ public class TokenBucketRateLimiter {
                 String.valueOf(capacity),
                 String.valueOf(refillRatePerSec),
                 String.valueOf(requestedCost),
-                String.valueOf(now)
-        );
+                String.valueOf(now));
 
         boolean allowed = result.get(0) == 1L;
         double remaining = result.get(1);
         long retryAfterSeconds = result.get(2);
-        
+
         return new RateLimitResult(
-        allowed,
-        remaining,
-        "token-bucket",
-        retryAfterSeconds
-        );
+                allowed,
+                remaining,
+                "token-bucket",
+                retryAfterSeconds);
+    }
+
+    public TokenBucketStatus getStatus(String tenantKey) {
+
+        String redisKey = "ratelimit:tb:" + tenantKey;
+
+        List<Object> bucket = redisTemplate.opsForHash().multiGet(
+                redisKey,
+                List.of("tokens", "last_refill"));
+
+        Object tokensValue = bucket.get(0);
+        Object lastRefillValue = bucket.get(1);
+
+        if (tokensValue == null || lastRefillValue == null) {
+            return new TokenBucketStatus(
+                    capacity,
+                    capacity,
+                    refillRatePerSec);
+        }
+
+        double tokens = Double.parseDouble(tokensValue.toString());
+
+        double lastRefill = Double.parseDouble(
+                lastRefillValue.toString());
+
+        // Redis is the authoritative clock for mutations.
+        // This read-only endpoint uses system time only to
+        // estimate the currently available tokens.
+        double now = System.currentTimeMillis() / 1000.0;
+
+        double elapsed = Math.max(0, now - lastRefill);
+
+        double available = Math.min(
+                capacity,
+                tokens + (elapsed * refillRatePerSec));
+
+        return new TokenBucketStatus(
+                available,
+                capacity,
+                refillRatePerSec);
     }
 }

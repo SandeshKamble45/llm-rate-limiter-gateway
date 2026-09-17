@@ -15,11 +15,11 @@ import java.util.List;
  *
  * The important property of this service is that budget admission is atomic:
  *
- *     read current spend
- *          +
- *     check against budget
- *          +
- *     reserve the requested amount
+ * read current spend
+ * +
+ * check against budget
+ * +
+ * reserve the requested amount
  *
  * happen inside one Redis Lua script.
  *
@@ -29,119 +29,181 @@ import java.util.List;
 @Service
 public class TenantQuotaService {
 
-    private final RedisTemplate<String, Object> redisTemplate;
-    private final DefaultRedisScript<List> budgetReservationScript;
+        private final RedisTemplate<String, Object> redisTemplate;
+        private final DefaultRedisScript<List> budgetReservationScript;
+        private final DefaultRedisScript<List> budgetSettlementScript;
 
-    /**
-     * Default daily budget: $5.
-     *
-     * Stored as microdollars:
-     *
-     *     $1 = 1,000,000 microdollars
-     *     $5 = 5,000,000 microdollars
-     *
-     * Integer accounting avoids floating-point money calculations.
-     */
-    @Value("${quota.daily-budget-microdollars:5000000}")
-    private long defaultDailyBudgetMicrodollars;
+        /**
+         * Default daily budget: $5.
+         *
+         * Stored as microdollars:
+         *
+         * $1 = 1,000,000 microdollars
+         * $5 = 5,000,000 microdollars
+         *
+         * Integer accounting avoids floating-point money calculations.
+         */
+        @Value("${quota.daily-budget-microdollars:5000000}")
+        private long defaultDailyBudgetMicrodollars;
 
-    /**
-     * Keep the daily key alive slightly longer than 24 hours so that
-     * it survives the UTC day boundary without being retained forever.
-     */
-    private static final long DAILY_KEY_TTL_SECONDS = 26 * 60 * 60;
+        /**
+         * Keep the daily key alive slightly longer than 24 hours so that
+         * it survives the UTC day boundary without being retained forever.
+         */
+        private static final long DAILY_KEY_TTL_SECONDS = 26 * 60 * 60;
 
-    public TenantQuotaService(
-            RedisTemplate<String, Object> redisTemplate,
-            DefaultRedisScript<List> budgetReservationScript) {
-        this.redisTemplate = redisTemplate;
-        this.budgetReservationScript = budgetReservationScript;
-    }
-
-    /**
-     * Atomically reserves budget for a request.
-     *
-     * @param tenantId tenant whose budget is being consumed
-     * @param requestedMicrodollars maximum expected cost of this request
-     * @return result describing whether the reservation succeeded
-     */
-    public BudgetReservationResult reserveBudget(
-            String tenantId,
-            long requestedMicrodollars) {
-
-        if (requestedMicrodollars <= 0) {
-            throw new IllegalArgumentException(
-                    "Requested budget must be greater than zero");
+        public TenantQuotaService(
+                        RedisTemplate<String, Object> redisTemplate,
+                        DefaultRedisScript<List> budgetReservationScript,
+                        DefaultRedisScript<List> budgetSettlementScript) {
+                this.redisTemplate = redisTemplate;
+                this.budgetReservationScript = budgetReservationScript;
+                this.budgetSettlementScript = budgetSettlementScript;
         }
 
-        String key = dailyKey(tenantId);
+        /**
+         * Atomically reserves budget for a request.
+         *
+         * @param tenantId              tenant whose budget is being consumed
+         * @param requestedMicrodollars maximum expected cost of this request
+         * @return result describing whether the reservation succeeded
+         */
+        public BudgetReservationResult reserveBudget(
+                        String tenantId,
+                        long requestedMicrodollars) {
 
-        List<Long> result = redisTemplate.execute(
-                budgetReservationScript,
-                List.of(key),
-                String.valueOf(requestedMicrodollars),
-                String.valueOf(defaultDailyBudgetMicrodollars),
-                String.valueOf(DAILY_KEY_TTL_SECONDS)
-        );
+                if (requestedMicrodollars <= 0) {
+                        throw new IllegalArgumentException(
+                                        "Requested budget must be greater than zero");
+                }
 
-        boolean allowed = result.get(0) == 1L;
-        long spentMicrodollars = result.get(1);
+                String key = dailyKey(tenantId);
 
-        long remainingMicrodollars = Math.max(
-                0,
-                defaultDailyBudgetMicrodollars - spentMicrodollars
-        );
+                List<Long> result = redisTemplate.execute(
+                                budgetReservationScript,
+                                List.of(key),
+                                String.valueOf(requestedMicrodollars),
+                                String.valueOf(defaultDailyBudgetMicrodollars),
+                                String.valueOf(DAILY_KEY_TTL_SECONDS));
 
-        return new BudgetReservationResult(
-                allowed,
-                spentMicrodollars,
-                remainingMicrodollars
-        );
-    }
+                boolean allowed = result.get(0) == 1L;
+                long spentMicrodollars = result.get(1);
 
-    /**
-     * Records additional actual usage after the LLM call.
-     *
-     * This method will be replaced by proper reservation settlement once
-     * provider-specific token pricing is introduced.
-     */
-    public void recordAdditionalUsage(
-            String tenantId,
-            long additionalMicrodollars) {
+                long remainingMicrodollars = Math.max(
+                                0,
+                                defaultDailyBudgetMicrodollars - spentMicrodollars);
 
-        if (additionalMicrodollars <= 0) {
-            return;
+                return new BudgetReservationResult(
+                                allowed,
+                                spentMicrodollars,
+                                remainingMicrodollars);
         }
 
-        String key = dailyKey(tenantId);
+        /**
+         * Records additional actual usage after the LLM call.
+         *
+         * This method will be replaced by proper reservation settlement once
+         * provider-specific token pricing is introduced.
+         */
+        public void recordAdditionalUsage(
+                        String tenantId,
+                        long additionalMicrodollars) {
 
-        redisTemplate.opsForValue().increment(
-                key,
-                additionalMicrodollars
-        );
+                if (additionalMicrodollars <= 0) {
+                        return;
+                }
 
-        redisTemplate.expire(
-                key,
-                Duration.ofSeconds(DAILY_KEY_TTL_SECONDS)
-        );
-    }
+                String key = dailyKey(tenantId);
 
-    private String dailyKey(String tenantId) {
-        LocalDate utcDate = LocalDate.now(ZoneOffset.UTC);
+                redisTemplate.opsForValue().increment(
+                                key,
+                                additionalMicrodollars);
 
-        return "quota:daily:"
-                + tenantId
-                + ":"
-                + utcDate;
-    }
+                redisTemplate.expire(
+                                key,
+                                Duration.ofSeconds(DAILY_KEY_TTL_SECONDS));
+        }
 
-    void clearForTesting(String tenantId) {
-         redisTemplate.delete(dailyKey(tenantId));
-    }
+        public BudgetSettlementResult settleBudget(
+                        String tenantId,
+                        long reservedMicrodollars,
+                        long actualMicrodollars) {
 
-    public record BudgetReservationResult(
-            boolean allowed,
-            long spentMicrodollars,
-            long remainingMicrodollars) {
-    }
+                if (reservedMicrodollars < 0) {
+                        throw new IllegalArgumentException(
+                                        "Reserved budget cannot be negative");
+                }
+
+                if (actualMicrodollars < 0) {
+                        throw new IllegalArgumentException(
+                                        "Actual budget cannot be negative");
+                }
+
+                String key = dailyKey(tenantId);
+
+                List<Long> result = redisTemplate.execute(
+                                budgetSettlementScript,
+                                List.of(key),
+                                String.valueOf(reservedMicrodollars),
+                                String.valueOf(actualMicrodollars),
+                                String.valueOf(defaultDailyBudgetMicrodollars),
+                                String.valueOf(DAILY_KEY_TTL_SECONDS));
+
+                long reserved = result.get(0);
+                long actual = result.get(1);
+                long adjustment = result.get(2);
+                long spent = result.get(3);
+                long remaining = result.get(4);
+                boolean withinBudget = result.get(5) == 1L;
+
+                return new BudgetSettlementResult(
+                                reserved,
+                                actual,
+                                adjustment,
+                                spent,
+                                remaining,
+                                withinBudget);
+        }
+
+        private String dailyKey(String tenantId) {
+                LocalDate utcDate = LocalDate.now(ZoneOffset.UTC);
+
+                return "quota:daily:"
+                                + tenantId
+                                + ":"
+                                + utcDate;
+        }
+
+        public BudgetReservationResult getBudgetStatus(
+                        String tenantId) {
+
+                String key = dailyKey(tenantId);
+
+                Object value = redisTemplate.opsForValue()
+                                .get(key);
+
+                long spent = value == null
+                                ? 0
+                                : Long.parseLong(value.toString());
+
+                long remaining = Math.max(
+                                0,
+                                defaultDailyBudgetMicrodollars
+                                                - spent);
+
+                return new BudgetReservationResult(
+                                spent < defaultDailyBudgetMicrodollars,
+                                spent,
+                                remaining);
+        }
+
+        void clearForTesting(String tenantId) {
+                redisTemplate.delete(dailyKey(tenantId));
+        }
+
+        public record BudgetReservationResult(
+                        boolean allowed,
+                        long spentMicrodollars,
+                        long remainingMicrodollars) {
+        }
 }
