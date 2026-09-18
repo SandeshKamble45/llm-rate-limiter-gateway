@@ -1,0 +1,34 @@
+<main>
+  <h1>LLM Rate Limiter Gateway</h1>
+
+  <p>Angular component is rendering.</p>
+
+  <p>
+    Tenant:
+    {{ status()?.tenantId }}
+  </p>
+
+  <p>
+    Token Bucket:
+    {{ status()?.tokenBucket?.availableTokens }}
+    /
+    {{ status()?.tokenBucket?.capacity }}
+  </p>
+
+  <p>
+    Requests:
+    {{ status()?.slidingWindow?.currentRequests }}
+    /
+    {{ status()?.slidingWindow?.maxRequests }}
+  </p>
+
+  <p>
+    Budget Remaining:
+    {{ status()?.dailyBudget?.remainingMicrodollars }}
+  </p>
+
+  <p>
+    Circuit Breaker:
+    {{ status()?.circuitBreaker?.state }}
+  </p>
+</main>
