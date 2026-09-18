@@ -1,34 +1,305 @@
-<main>
-  <h1>LLM Rate Limiter Gateway</h1>
+<div class="dashboard">
+  <!-- Header -->
+  <header class="dashboard-header">
+    <div>
+      <p class="eyebrow">INFRASTRUCTURE / LLM GATEWAY</p>
+      <h1>LLM Rate Limiter Gateway</h1>
+      <p class="subtitle">Distributed rate limiting, cost control &amp; provider resilience</p>
+    </div>
 
-  <p>Angular component is rendering.</p>
+    <div class="header-status">
+      <span class="status-dot"></span>
+      <span>OPERATIONAL</span>
+    </div>
+  </header>
 
-  <p>
-    Tenant:
-    {{ status()?.tenantId }}
-  </p>
+  <!-- Tenant / Refresh -->
+  <div class="toolbar">
+    <div class="tenant">
+      <span class="label">TENANT</span>
+      <span class="tenant-value">
+        {{ status()?.tenantId ?? 'Loading...' }}
+      </span>
+    </div>
 
-  <p>
-    Token Bucket:
-    {{ status()?.tokenBucket?.availableTokens }}
-    /
-    {{ status()?.tokenBucket?.capacity }}
-  </p>
+    <button class="refresh-button" type="button" (click)="loadStatus()">↻ Refresh</button>
+  </div>
 
-  <p>
-    Requests:
-    {{ status()?.slidingWindow?.currentRequests }}
-    /
-    {{ status()?.slidingWindow?.maxRequests }}
-  </p>
+  @if (status(); as gateway) {
+    <!-- Core Metrics -->
+    <section class="metrics-grid">
+      <!-- Token Bucket -->
+      <article class="metric-card">
+        <div class="card-header">
+          <span class="card-label">TOKEN BUCKET</span>
+          <span class="card-icon">TB</span>
+        </div>
 
-  <p>
-    Budget Remaining:
-    {{ status()?.dailyBudget?.remainingMicrodollars }}
-  </p>
+        <div class="metric-value">
+          {{ gateway.tokenBucket.availableTokens | number: '1.0-0' }}
+          <span>
+            /
+            {{ gateway.tokenBucket.capacity | number: '1.0-0' }}
+          </span>
+        </div>
 
-  <p>
-    Circuit Breaker:
-    {{ status()?.circuitBreaker?.state }}
-  </p>
-</main>
+        <div class="progress-track">
+          <div
+            class="progress-fill"
+            [style.width.%]="
+              (gateway.tokenBucket.availableTokens / gateway.tokenBucket.capacity) * 100
+            "
+          ></div>
+        </div>
+
+        <div class="metric-footer">
+          <span>Available capacity</span>
+          <strong> {{ gateway.tokenBucket.refillRatePerSecond }} tokens/sec </strong>
+        </div>
+      </article>
+
+      <!-- Sliding Window -->
+      <article class="metric-card">
+        <div class="card-header">
+          <span class="card-label">REQUEST LIMIT</span>
+          <span class="card-icon">RPM</span>
+        </div>
+
+        <div class="metric-value">
+          {{ gateway.slidingWindow.currentRequests }}
+          <span>
+            /
+            {{ gateway.slidingWindow.maxRequests }}
+          </span>
+        </div>
+
+        <div class="progress-track">
+          <div
+            class="progress-fill"
+            [style.width.%]="
+              (gateway.slidingWindow.currentRequests / gateway.slidingWindow.maxRequests) * 100
+            "
+          ></div>
+        </div>
+
+        <div class="metric-footer">
+          <span>{{ gateway.slidingWindow.windowSeconds }} second window</span>
+          <strong> {{ gateway.slidingWindow.remainingRequests }} remaining </strong>
+        </div>
+      </article>
+
+      <!-- Budget -->
+      <article class="metric-card">
+        <div class="card-header">
+          <span class="card-label">DAILY BUDGET</span>
+          <span class="card-icon">$</span>
+        </div>
+
+        <div class="metric-value">
+          ${{ gateway.dailyBudget.remainingMicrodollars / 1000000 | number: '1.2-6' }}
+        </div>
+
+        <div class="progress-track">
+          <div
+            class="progress-fill"
+            [style.width.%]="
+              (gateway.dailyBudget.remainingMicrodollars /
+                (gateway.dailyBudget.remainingMicrodollars +
+                  gateway.dailyBudget.spentMicrodollars)) *
+              100
+            "
+          ></div>
+        </div>
+
+        <div class="metric-footer">
+          <span>
+            Spent: ${{ gateway.dailyBudget.spentMicrodollars / 1000000 | number: '1.2-6' }}
+          </span>
+
+          <strong>
+            {{ gateway.dailyBudget.allowed ? 'Within budget' : 'Budget exceeded' }}
+          </strong>
+        </div>
+      </article>
+    </section>
+
+    <!-- Playground + Circuit Breaker -->
+    <section class="main-grid">
+      <!-- Request Playground -->
+      <article class="panel playground">
+        <div class="panel-header">
+          <div>
+            <p class="card-label">REQUEST PLAYGROUND</p>
+            <h2>Send a request through the gateway</h2>
+          </div>
+        </div>
+
+        <label for="tenant">Tenant ID</label>
+
+        <input id="tenant" type="text" value="demo-tenant" readonly />
+
+        <label for="prompt">Prompt</label>
+
+        <textarea
+          id="prompt"
+          rows="7"
+          placeholder="Enter a prompt to send through the gateway..."
+          [value]="prompt()"
+          (input)="onPromptChange($any($event.target).value)"
+          [disabled]="isSending()"
+        ></textarea>
+
+        <div class="playground-footer">
+          <span class="prompt-hint"> {{ prompt().length }} / 10,000 characters </span>
+
+          <button
+            class="primary-button"
+            type="button"
+            (click)="sendRequest()"
+            [disabled]="isSending()"
+          >
+            @if (isSending()) {
+              <span>Sending...</span>
+            } @else {
+              <span>Send Request</span>
+            }
+          </button>
+        </div>
+      </article>
+      <!-- Circuit Breaker -->
+      <article class="panel">
+        <div class="panel-header">
+          <div>
+            <p class="card-label">PROVIDER RESILIENCE</p>
+            <h2>Circuit Breaker</h2>
+          </div>
+        </div>
+
+        <div class="breaker-state">
+          <span class="status-dot" [class.open]="gateway.circuitBreaker.state !== 'CLOSED'"> </span>
+
+          <span>{{ gateway.circuitBreaker.state }}</span>
+        </div>
+
+        <div class="details-list">
+          <div>
+            <span>Provider</span>
+            <strong>{{ gateway.circuitBreaker.name }}</strong>
+          </div>
+
+          <div>
+            <span>Failure rate</span>
+            <strong>
+              {{
+                gateway.circuitBreaker.failureRate < 0
+                  ? '—'
+                  : gateway.circuitBreaker.failureRate + '%'
+              }}
+            </strong>
+          </div>
+
+          <div>
+            <span>Buffered calls</span>
+            <strong>{{ gateway.circuitBreaker.bufferedCalls }}</strong>
+          </div>
+
+          <div>
+            <span>Failed calls</span>
+            <strong>{{ gateway.circuitBreaker.failedCalls }}</strong>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <!-- Last Request -->
+    <section class="panel last-request">
+      <div class="panel-header">
+        <div>
+          <p class="card-label">REQUEST ACTIVITY</p>
+          <h2>Last Request</h2>
+        </div>
+
+        @if (lastResponse()) {
+          <span class="success-badge"> SUCCESS </span>
+        }
+      </div>
+
+      @if (lastResponse(); as result) {
+        <div class="request-summary">
+          <div class="summary-item">
+            <span>MODEL</span>
+            <strong>{{ result.response.modelUsed }}</strong>
+          </div>
+
+          <div class="summary-item">
+            <span>TOTAL TOKENS</span>
+            <strong>{{ result.response.usage.totalTokens }}</strong>
+          </div>
+
+          <div class="summary-item">
+            <span>INPUT</span>
+            <strong>{{ result.response.usage.inputTokens }}</strong>
+          </div>
+
+          <div class="summary-item">
+            <span>OUTPUT</span>
+            <strong>{{ result.response.usage.outputTokens }}</strong>
+          </div>
+
+          <div class="summary-item">
+            <span>ESTIMATED COST</span>
+            <strong> ${{ result.estimatedCostMicrodollars / 1000000 | number: '1.2-6' }} </strong>
+          </div>
+
+          <div class="summary-item">
+            <span>ACTUAL COST</span>
+            <strong> ${{ result.actualCostMicrodollars / 1000000 | number: '1.2-6' }} </strong>
+          </div>
+        </div>
+
+        <div class="settlement">
+          <div>
+            <span>Budget reserved</span>
+            <strong>
+              ${{ result.settlement.reservedMicrodollars / 1000000 | number: '1.2-6' }}
+            </strong>
+          </div>
+
+          <div>
+            <span>Actual usage</span>
+            <strong>
+              ${{ result.settlement.actualMicrodollars / 1000000 | number: '1.2-6' }}
+            </strong>
+          </div>
+
+          <div>
+            <span>Adjustment</span>
+            <strong [class.refund]="result.settlement.adjustmentMicrodollars < 0">
+              ${{ result.settlement.adjustmentMicrodollars / 1000000 | number: '1.2-6' }}
+            </strong>
+          </div>
+        </div>
+
+        <div class="response-content">
+          <span class="response-label">MODEL RESPONSE</span>
+
+          <p>{{ result.response.completion }}</p>
+        </div>
+      } @else {
+        <div class="empty-state">
+          <div class="empty-icon">→</div>
+
+          <p>No requests submitted yet</p>
+
+          <span> Send a request from the playground to see gateway activity. </span>
+        </div>
+      }
+    </section>
+  }
+
+  @if (error(); as message) {
+    <div class="error-banner">
+      {{ message }}
+    </div>
+  }
+</div>

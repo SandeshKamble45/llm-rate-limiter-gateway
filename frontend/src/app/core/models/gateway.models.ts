@@ -21,8 +21,8 @@ export interface CircuitBreakerStatus {
   name: string;
   state: string;
   failureRate: number;
-  numberOfBufferedCalls: number;
-  numberOfFailedCalls: number;
+  bufferedCalls: number;
+  failedCalls: number;
 }
 
 export interface GatewayStatus {
