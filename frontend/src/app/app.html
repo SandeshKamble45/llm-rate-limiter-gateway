@@ -211,6 +211,33 @@
       </article>
     </section>
 
+    @if (requestError(); as requestError) {
+      <section class="request-error-panel">
+        <div class="error-indicator">!</div>
+
+        <div class="error-content">
+          <div class="error-heading">
+            <span class="error-title">
+              {{ requestError.title }}
+            </span>
+
+            <span class="error-status"> HTTP {{ requestError.status }} </span>
+          </div>
+
+          <p>
+            {{ requestError.message }}
+          </p>
+
+          @if (requestError.retryAfterSeconds !== undefined) {
+            <div class="retry-info">
+              Retry after
+              <strong>{{ requestError.retryAfterSeconds }}s</strong>
+            </div>
+          }
+        </div>
+      </section>
+    }
+
     <!-- Last Request -->
     <section class="panel last-request">
       <div class="panel-header">
@@ -244,6 +271,11 @@
           <div class="summary-item">
             <span>OUTPUT</span>
             <strong>{{ result.response.usage.outputTokens }}</strong>
+          </div>
+
+          <div class="summary-item">
+            <span>LATENCY</span>
+            <strong>{{ result.latencyMs }} ms</strong>
           </div>
 
           <div class="summary-item">

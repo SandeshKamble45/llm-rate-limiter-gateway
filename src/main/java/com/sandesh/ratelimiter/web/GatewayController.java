@@ -189,6 +189,7 @@ public class GatewayController {
                                 estimatedReservation);
 
                 if (!budgetReservation.allowed()) {
+
                         return ResponseEntity.status(
                                         HttpStatus.PAYMENT_REQUIRED)
                                         .body(budgetReservation);
@@ -198,26 +199,37 @@ public class GatewayController {
                  * Step 6:
                  * Call the LLM provider.
                  *
-                 * The latency timer covers the provider operation,
-                 * including retry/fallback processing performed
-                 * inside LlmProviderClient.
+                 * The latency timer covers the complete provider
+                 * operation, including retry/fallback processing
+                 * performed inside LlmProviderClient.
                  */
                 gatewayMetrics.recordLlmCall();
 
                 long llmStartNanos = System.nanoTime();
 
                 LlmProviderClient.LlmResponse response;
+                long latencyMs;
 
                 try {
 
                         response = llmProviderClient.callPrimaryModel(prompt);
 
+                        long latencyNanos = System.nanoTime() - llmStartNanos;
+
+                        latencyMs = java.util.concurrent.TimeUnit.NANOSECONDS
+                                        .toMillis(latencyNanos);
+
+                        gatewayMetrics.recordLlmLatency(
+                                        latencyNanos);
+
                 } catch (RuntimeException exception) {
+
+                        long latencyNanos = System.nanoTime() - llmStartNanos;
 
                         gatewayMetrics.recordLlmFailure();
 
                         gatewayMetrics.recordLlmLatency(
-                                        System.nanoTime() - llmStartNanos);
+                                        latencyNanos);
 
                         /*
                          * The budget was reserved before the provider call.
@@ -237,9 +249,6 @@ public class GatewayController {
                                                                         estimatedReservation,
                                                                         settlement));
                 }
-
-                gatewayMetrics.recordLlmLatency(
-                                System.nanoTime() - llmStartNanos);
 
                 /*
                  * Step 7:
@@ -265,7 +274,8 @@ public class GatewayController {
                 /*
                  * Record actual calculated cost.
                  */
-                gatewayMetrics.recordActualCost(actualCost);
+                gatewayMetrics.recordActualCost(
+                                actualCost);
 
                 /*
                  * Step 8:
@@ -281,7 +291,8 @@ public class GatewayController {
                                                 response,
                                                 estimatedReservation,
                                                 actualCost,
-                                                settlement));
+                                                settlement,
+                                                latencyMs));
         }
 
         @PostMapping("/check/token-bucket")
@@ -326,7 +337,8 @@ public class GatewayController {
                         LlmProviderClient.LlmResponse response,
                         long estimatedCostMicrodollars,
                         long actualCostMicrodollars,
-                        BudgetSettlementResult settlement) {
+                        BudgetSettlementResult settlement,
+                        long latencyMs) {
         }
 
         public record GatewayErrorResponse(

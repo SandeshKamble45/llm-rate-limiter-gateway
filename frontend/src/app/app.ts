@@ -7,6 +7,13 @@ import {
   GatewayStatus
 } from './core/models/gateway.models';
 
+interface RequestError {
+  status: number;
+  title: string;
+  message: string;
+  retryAfterSeconds?: number;
+}
+
 @Component({
   selector: 'app-root',
   imports: [CommonModule],
@@ -22,7 +29,9 @@ export class App {
 
   readonly prompt = signal('');
   readonly isSending = signal(false);
+
   readonly lastResponse = signal<GatewayResponse | null>(null);
+  readonly requestError = signal<RequestError | null>(null);
 
   constructor() {
     this.loadStatus();
@@ -45,12 +54,17 @@ export class App {
     const currentPrompt = this.prompt().trim();
 
     if (!currentPrompt) {
-      this.error.set('Please enter a prompt.');
+      this.requestError.set({
+        status: 400,
+        title: 'VALIDATION ERROR',
+        message: 'Please enter a prompt before sending the request.'
+      });
+
       return;
     }
 
     this.isSending.set(true);
-    this.error.set(null);
+    this.requestError.set(null);
 
     this.gatewayApi.sendChat({
       tenantId: 'demo-tenant',
@@ -60,36 +74,92 @@ export class App {
         console.log('CHAT RESPONSE:', response);
 
         this.lastResponse.set(response);
+        this.requestError.set(null);
         this.isSending.set(false);
 
-        // Refresh live gateway state after the request.
+        /*
+         * Refresh Redis-backed gateway state after the request.
+         */
         this.loadStatus();
       },
+
       error: (error) => {
         console.error('CHAT ERROR:', error);
 
         this.isSending.set(false);
 
-        if (error.status === 429) {
-          this.error.set(
-            `Request rejected by rate limiter${error.error?.retryAfterSeconds
-              ? ` — retry after ${error.error.retryAfterSeconds}s`
-              : ''}.`
-          );
-        } else if (error.status === 502) {
-          this.error.set(
-            'LLM provider request failed. The gateway rejected the operation.'
-          );
-        } else {
-          this.error.set(
-            error.error?.message ?? 'Request failed. Please try again.'
-          );
-        }
+        this.requestError.set(
+          this.mapRequestError(error)
+        );
 
-        // Even failed requests may change gateway state.
+        /*
+         * Failed requests can still affect gateway state.
+         * For example, a rate-limit rejection updates the
+         * sliding-window state.
+         */
         this.loadStatus();
       }
     });
+  }
+
+  private mapRequestError(error: {
+    status?: number;
+    error?: {
+      message?: string;
+      retryAfterSeconds?: number;
+    } | string;
+  }): RequestError {
+
+    const status = error.status ?? 0;
+
+    if (status === 429) {
+      const retryAfterSeconds =
+        typeof error.error === 'object'
+          ? error.error?.retryAfterSeconds
+          : undefined;
+
+      return {
+        status: 429,
+        title: 'RATE LIMITED',
+        message: 'The gateway rejected the request because the rate limit was reached.',
+        retryAfterSeconds
+      };
+    }
+
+    if (status === 402) {
+      return {
+        status: 402,
+        title: 'BUDGET EXCEEDED',
+        message: 'The tenant does not have enough daily budget available for this request.'
+      };
+    }
+
+    if (status === 502) {
+      return {
+        status: 502,
+        title: 'PROVIDER UNAVAILABLE',
+        message: 'The LLM provider operation failed. The gateway released the reserved budget.'
+      };
+    }
+
+    if (status === 400) {
+      const message =
+        typeof error.error === 'string'
+          ? error.error
+          : error.error?.message ?? 'The request is invalid.';
+
+      return {
+        status: 400,
+        title: 'VALIDATION ERROR',
+        message
+      };
+    }
+
+    return {
+      status,
+      title: 'REQUEST FAILED',
+      message: 'The gateway could not complete the request.'
+    };
   }
 
   onPromptChange(value: string): void {

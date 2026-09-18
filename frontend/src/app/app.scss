@@ -423,7 +423,7 @@ h1 {
 
 .request-summary {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(7, 1fr);
   border-top: 1px solid #202731;
   border-bottom: 1px solid #202731;
 }
@@ -510,13 +510,79 @@ h1 {
   white-space: pre-wrap;
 }
 
-@media (max-width: 1000px) {
-  .request-summary {
-    grid-template-columns: repeat(3, 1fr);
-  }
+/* Request error state */
 
-  .summary-item:nth-child(3) {
-    border-right: 0;
+.request-error-panel {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding: 17px 18px;
+  border: 1px solid #4a2929;
+  border-radius: 10px;
+  background: #171011;
+}
+
+.error-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  border: 1px solid #704040;
+  border-radius: 50%;
+  color: #ef8d8d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.error-content {
+  min-width: 0;
+  flex: 1;
+}
+
+.error-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.error-title {
+  color: #ef8d8d;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.error-status {
+  color: #7d8998;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 10px;
+}
+
+.error-content p {
+  margin: 7px 0 0;
+  color: #aeb8c4;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.retry-info {
+  margin-top: 10px;
+  color: #7d8998;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 10px;
+}
+
+.retry-info strong {
+  color: #efc477;
+  font-weight: 500;
+}
+
+@media (max-width: 1100px) {
+  .request-summary {
+    grid-template-columns: repeat(4, 1fr);
   }
 }
 

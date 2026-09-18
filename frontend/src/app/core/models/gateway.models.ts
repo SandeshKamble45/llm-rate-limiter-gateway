@@ -59,6 +59,7 @@ export interface GatewayResponse {
   estimatedCostMicrodollars: number;
   actualCostMicrodollars: number;
   settlement: BudgetSettlement;
+  latencyMs: number;
 }
 
 export interface ChatRequest {
