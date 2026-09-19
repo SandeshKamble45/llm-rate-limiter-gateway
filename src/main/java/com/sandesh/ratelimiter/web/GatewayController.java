@@ -122,7 +122,7 @@ public class GatewayController {
                 String tenantId = request.tenantId().trim();
                 String prompt = request.prompt();
 
-                String model = "primary-model";
+                String model = llmProviderClient.getPrimaryModel();
                 String tenantKey = tenantId + ":" + model;
 
                 /*

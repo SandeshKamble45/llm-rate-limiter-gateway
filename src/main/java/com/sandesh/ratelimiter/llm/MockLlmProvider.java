@@ -6,10 +6,17 @@ import org.springframework.stereotype.Component;
 @Component
 public class MockLlmProvider implements LlmProvider {
 
+    private static final String MODEL = "primary-model";
+
     private final TokenCounter tokenCounter;
 
     public MockLlmProvider(TokenCounter tokenCounter) {
         this.tokenCounter = tokenCounter;
+    }
+
+    @Override
+    public String getModel() {
+        return MODEL;
     }
 
     @Override
@@ -37,7 +44,7 @@ public class MockLlmProvider implements LlmProvider {
         );
 
         return new LlmResponse(
-                "primary-model",
+                MODEL,
                 completion,
                 usage
         );

@@ -37,6 +37,11 @@ public class OpenAiLlmProvider implements LlmProvider {
     }
 
     @Override
+    public String getModel() {
+        return properties.getModel();
+    }
+
+    @Override
     public LlmResponse complete(String prompt) {
 
         if (properties.getApiKey() == null

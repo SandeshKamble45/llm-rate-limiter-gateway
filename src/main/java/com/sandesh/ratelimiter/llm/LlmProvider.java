@@ -4,6 +4,8 @@ import com.sandesh.ratelimiter.model.UsageMetadata;
 
 public interface LlmProvider {
 
+    String getModel();
+
     LlmResponse complete(String prompt);
 
     record LlmResponse(

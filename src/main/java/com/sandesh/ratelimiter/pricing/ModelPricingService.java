@@ -19,7 +19,13 @@ public class ModelPricingService {
                     new ModelPricing(
                             "fallback-model",
                             10_000L,
-                            40_000L)
+                            40_000L),
+
+                    "gpt-5-mini",
+                    new ModelPricing(
+                            "gpt-5-mini",
+                            250_000L,
+                            2_000_000L)
             );
 
     public ModelPricing getPricing(String model) {

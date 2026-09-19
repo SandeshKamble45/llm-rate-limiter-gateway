@@ -38,6 +38,10 @@ public class LlmProviderClient {
         this.fallbackProvider = fallbackProvider;
     }
 
+    public String getPrimaryModel() {
+        return primaryProvider.getModel();
+    }
+
     @CircuitBreaker(
             name = "primaryLlm",
             fallbackMethod = "fallbackToSecondaryModel")

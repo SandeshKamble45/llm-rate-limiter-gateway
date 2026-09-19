@@ -97,6 +97,9 @@ class GatewayControllerIntegrationTest {
   @BeforeEach
   void cleanRedis() {
 
+    when(llmProviderClient.getPrimaryModel())
+        .thenReturn("primary-model");
+
     redisTemplate.delete(
         "ratelimit:tb:test-tenant:default-model");
 

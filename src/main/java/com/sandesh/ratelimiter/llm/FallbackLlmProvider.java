@@ -6,10 +6,17 @@ import org.springframework.stereotype.Component;
 @Component
 public class FallbackLlmProvider implements LlmProvider {
 
+    private static final String MODEL = "fallback-model";
+
     private final TokenCounter tokenCounter;
 
     public FallbackLlmProvider(TokenCounter tokenCounter) {
         this.tokenCounter = tokenCounter;
+    }
+
+    @Override
+    public String getModel() {
+        return MODEL;
     }
 
     @Override
@@ -31,7 +38,7 @@ public class FallbackLlmProvider implements LlmProvider {
         );
 
         return new LlmResponse(
-                "fallback-model",
+                MODEL,
                 completion,
                 usage
         );

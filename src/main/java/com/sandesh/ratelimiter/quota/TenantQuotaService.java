@@ -5,7 +5,6 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 
-import java.time.Duration;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -97,31 +96,6 @@ public class TenantQuotaService {
                                 allowed,
                                 spentMicrodollars,
                                 remainingMicrodollars);
-        }
-
-        /**
-         * Records additional actual usage after the LLM call.
-         *
-         * This method will be replaced by proper reservation settlement once
-         * provider-specific token pricing is introduced.
-         */
-        public void recordAdditionalUsage(
-                        String tenantId,
-                        long additionalMicrodollars) {
-
-                if (additionalMicrodollars <= 0) {
-                        return;
-                }
-
-                String key = dailyKey(tenantId);
-
-                redisTemplate.opsForValue().increment(
-                                key,
-                                additionalMicrodollars);
-
-                redisTemplate.expire(
-                                key,
-                                Duration.ofSeconds(DAILY_KEY_TTL_SECONDS));
         }
 
         public BudgetSettlementResult settleBudget(
