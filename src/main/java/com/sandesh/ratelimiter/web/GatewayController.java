@@ -1,6 +1,7 @@
 package com.sandesh.ratelimiter.web;
 
 import com.sandesh.ratelimiter.llm.LlmProviderClient;
+import com.sandesh.ratelimiter.llm.LlmProvider;
 import com.sandesh.ratelimiter.llm.TokenCounter;
 import com.sandesh.ratelimiter.metrics.GatewayMetrics;
 import com.sandesh.ratelimiter.model.CircuitBreakerStatus;
@@ -207,7 +208,7 @@ public class GatewayController {
 
                 long llmStartNanos = System.nanoTime();
 
-                LlmProviderClient.LlmResponse response;
+                LlmProvider.LlmResponse response;
                 long latencyMs;
 
                 try {
@@ -334,7 +335,7 @@ public class GatewayController {
         }
 
         public record GatewayResponse(
-                        LlmProviderClient.LlmResponse response,
+                        LlmProvider.LlmResponse response,
                         long estimatedCostMicrodollars,
                         long actualCostMicrodollars,
                         BudgetSettlementResult settlement,

@@ -12,10 +12,18 @@ class LlmProviderClientTest {
 
         TokenCounter tokenCounter = new TokenCounter();
 
-        LlmProviderClient client =
-                new LlmProviderClient(tokenCounter);
+        MockLlmProvider primaryProvider =
+                new MockLlmProvider(tokenCounter);
 
-        LlmProviderClient.LlmResponse response = null;
+        FallbackLlmProvider fallbackProvider =
+                new FallbackLlmProvider(tokenCounter);
+
+        LlmProviderClient client =
+                new LlmProviderClient(
+                        primaryProvider,
+                        fallbackProvider);
+
+        LlmProvider.LlmResponse response = null;
 
         /*
          * The mock provider intentionally has a 15% simulated
@@ -26,6 +34,7 @@ class LlmProviderClientTest {
                 response =
                         client.callPrimaryModel(
                                 "Explain Redis Lua atomicity");
+
                 if (response != null
                         && "primary-model".equals(
                                 response.modelUsed())) {
@@ -54,10 +63,18 @@ class LlmProviderClientTest {
 
         TokenCounter tokenCounter = new TokenCounter();
 
-        LlmProviderClient client =
-                new LlmProviderClient(tokenCounter);
+        MockLlmProvider primaryProvider =
+                new MockLlmProvider(tokenCounter);
 
-        LlmProviderClient.LlmResponse response =
+        FallbackLlmProvider fallbackProvider =
+                new FallbackLlmProvider(tokenCounter);
+
+        LlmProviderClient client =
+                new LlmProviderClient(
+                        primaryProvider,
+                        fallbackProvider);
+
+        LlmProvider.LlmResponse response =
                 client.fallbackToSecondaryModel(
                         "Explain token bucket",
                         new RuntimeException("provider failure"));

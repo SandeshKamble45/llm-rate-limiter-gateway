@@ -2,6 +2,7 @@ package com.sandesh.ratelimiter.web;
 
 import com.redis.testcontainers.RedisContainer;
 import com.sandesh.ratelimiter.llm.LlmProviderClient;
+import com.sandesh.ratelimiter.llm.LlmProvider;
 import com.sandesh.ratelimiter.model.RateLimitResult;
 import com.sandesh.ratelimiter.model.SlidingWindowStatus;
 import com.sandesh.ratelimiter.model.TokenBucketStatus;
@@ -132,7 +133,7 @@ class GatewayControllerIntegrationTest {
 
     when(llmProviderClient.callPrimaryModel(anyString()))
         .thenReturn(
-            new LlmProviderClient.LlmResponse(
+            new LlmProvider.LlmResponse(
                 "primary-model",
                 "mock response",
                 10));
@@ -236,7 +237,7 @@ class GatewayControllerIntegrationTest {
 
     when(llmProviderClient.callPrimaryModel(anyString()))
         .thenReturn(
-            new LlmProviderClient.LlmResponse(
+            new LlmProvider.LlmResponse(
                 "primary-model",
                 "mock response",
                 10));
@@ -284,7 +285,7 @@ class GatewayControllerIntegrationTest {
 
     when(llmProviderClient.callPrimaryModel(anyString()))
         .thenReturn(
-            new LlmProviderClient.LlmResponse(
+            new LlmProvider.LlmResponse(
                 "primary-model",
                 "mock response",
                 expectedTokens));
