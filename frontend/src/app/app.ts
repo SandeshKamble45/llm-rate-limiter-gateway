@@ -238,22 +238,32 @@ export class App {
   }
 
   private startRetryCountdown(seconds: number): void {
-    this.stopRetryCountdown();
+  this.stopRetryCountdown();
 
-    this.retryCountdown.set(seconds);
+  this.retryCountdown.set(seconds);
 
-    this.retryTimer = setInterval(() => {
-      const remaining = this.retryCountdown();
+  this.retryTimer = setInterval(() => {
+    const remaining = this.retryCountdown();
 
-      if (remaining === null || remaining <= 1) {
-        this.stopRetryCountdown();
-        this.retryCountdown.set(null);
-        return;
-      }
+    if (remaining === null) {
+      this.stopRetryCountdown();
+      return;
+    }
 
-      this.retryCountdown.set(remaining - 1);
-    }, 1000);
-  }
+    if (remaining <= 1) {
+      this.stopRetryCountdown();
+      this.retryCountdown.set(0);
+
+      // The rate-limit window has expired.
+      // Refresh Redis-backed gateway state automatically.
+      this.refreshStatus();
+
+      return;
+    }
+
+    this.retryCountdown.set(remaining - 1);
+  }, 1000);
+}
 
   private stopRetryCountdown(): void {
     if (this.retryTimer !== null) {
