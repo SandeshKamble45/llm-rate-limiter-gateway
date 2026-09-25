@@ -12,6 +12,7 @@ interface RequestError {
   title: string;
   message: string;
   retryAfterSeconds?: number;
+  algorithm?: string;
 }
 
 @Component({
@@ -27,18 +28,30 @@ export class App {
   readonly status = signal<GatewayStatus | null>(null);
   readonly error = signal<string | null>(null);
 
+  readonly tenantId = signal('demo-tenant');
   readonly prompt = signal('');
   readonly isSending = signal(false);
 
   readonly lastResponse = signal<GatewayResponse | null>(null);
   readonly requestError = signal<RequestError | null>(null);
+  readonly retryCountdown = signal<number | null>(null);
+
+  private retryTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
     this.loadStatus();
   }
 
   loadStatus(): void {
-    this.gatewayApi.getStatus('demo-tenant').subscribe({
+    const tenant = this.tenantId().trim();
+
+    if (!tenant) {
+      this.status.set(null);
+      this.error.set('Enter a tenant ID to load gateway status.');
+      return;
+    }
+
+    this.gatewayApi.getStatus(tenant).subscribe({
       next: (status) => {
         this.status.set(status);
         this.error.set(null);
@@ -50,8 +63,26 @@ export class App {
     });
   }
 
+  refreshStatus(): void {
+    this.stopRetryCountdown();
+    this.retryCountdown.set(null);
+    this.requestError.set(null);
+    this.loadStatus();
+  }
+
   sendRequest(): void {
+    const tenant = this.tenantId().trim();
     const currentPrompt = this.prompt().trim();
+
+    if (!tenant) {
+      this.requestError.set({
+        status: 400,
+        title: 'VALIDATION ERROR',
+        message: 'Please enter a tenant ID before sending the request.'
+      });
+
+      return;
+    }
 
     if (!currentPrompt) {
       this.requestError.set({
@@ -63,11 +94,14 @@ export class App {
       return;
     }
 
+    this.stopRetryCountdown();
+    this.retryCountdown.set(null);
+
     this.isSending.set(true);
     this.requestError.set(null);
 
     this.gatewayApi.sendChat({
-      tenantId: 'demo-tenant',
+      tenantId: tenant,
       prompt: currentPrompt
     }).subscribe({
       next: (response) => {
@@ -76,6 +110,9 @@ export class App {
         this.lastResponse.set(response);
         this.requestError.set(null);
         this.isSending.set(false);
+
+        this.stopRetryCountdown();
+        this.retryCountdown.set(null);
 
         /*
          * Refresh Redis-backed gateway state after the request.
@@ -88,9 +125,17 @@ export class App {
 
         this.isSending.set(false);
 
-        this.requestError.set(
-          this.mapRequestError(error)
-        );
+        const requestError = this.mapRequestError(error);
+
+        this.requestError.set(requestError);
+
+        if (
+          requestError.status === 429 &&
+          requestError.retryAfterSeconds !== undefined &&
+          requestError.retryAfterSeconds > 0
+        ) {
+          this.startRetryCountdown(requestError.retryAfterSeconds);
+        }
 
         /*
          * Failed requests can still affect gateway state.
@@ -107,22 +152,42 @@ export class App {
     error?: {
       message?: string;
       retryAfterSeconds?: number;
+      algorithm?: string;
     } | string;
   }): RequestError {
 
     const status = error.status ?? 0;
 
     if (status === 429) {
-      const retryAfterSeconds =
+      const responseBody =
         typeof error.error === 'object'
-          ? error.error?.retryAfterSeconds
+          ? error.error
           : undefined;
+
+      const retryAfterSeconds =
+        responseBody?.retryAfterSeconds;
+
+      const algorithm =
+        responseBody?.algorithm;
+
+      if (algorithm === 'token-bucket') {
+        return {
+          status: 429,
+          title: 'TOKEN CAPACITY EXHAUSTED',
+          message:
+            'The gateway rejected the request because the tenant token bucket does not have enough capacity.',
+          retryAfterSeconds,
+          algorithm
+        };
+      }
 
       return {
         status: 429,
         title: 'RATE LIMITED',
-        message: 'The gateway rejected the request because the rate limit was reached.',
-        retryAfterSeconds
+        message:
+          'The gateway rejected the request because the request rate limit was reached.',
+        retryAfterSeconds,
+        algorithm
       };
     }
 
@@ -130,7 +195,8 @@ export class App {
       return {
         status: 402,
         title: 'BUDGET EXCEEDED',
-        message: 'The tenant does not have enough daily budget available for this request.'
+        message:
+          'The tenant does not have enough daily budget available for this request.'
       };
     }
 
@@ -138,7 +204,8 @@ export class App {
       return {
         status: 502,
         title: 'PROVIDER UNAVAILABLE',
-        message: 'The LLM provider operation failed. The gateway released the reserved budget.'
+        message:
+          'The LLM provider operation failed. The gateway released the reserved budget.'
       };
     }
 
@@ -162,7 +229,36 @@ export class App {
     };
   }
 
+  onTenantIdChange(value: string): void {
+    this.tenantId.set(value);
+  }
+
   onPromptChange(value: string): void {
     this.prompt.set(value);
+  }
+
+  private startRetryCountdown(seconds: number): void {
+    this.stopRetryCountdown();
+
+    this.retryCountdown.set(seconds);
+
+    this.retryTimer = setInterval(() => {
+      const remaining = this.retryCountdown();
+
+      if (remaining === null || remaining <= 1) {
+        this.stopRetryCountdown();
+        this.retryCountdown.set(null);
+        return;
+      }
+
+      this.retryCountdown.set(remaining - 1);
+    }, 1000);
+  }
+
+  private stopRetryCountdown(): void {
+    if (this.retryTimer !== null) {
+      clearInterval(this.retryTimer);
+      this.retryTimer = null;
+    }
   }
 }
