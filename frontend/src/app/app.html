@@ -1,52 +1,220 @@
-<div class="dashboard">
 
-  <header class="dashboard-header">
-    <div class="header-copy">
-      <p class="eyebrow">INFRASTRUCTURE / LLM GATEWAY</p>
+  <div class="dashboard">
 
-      <h1>LLM Rate Limiter Gateway</h1>
+    @if (!backendReady()) {
 
-      <p class="subtitle">
-        Distributed rate limiting, cost control &amp; provider resilience
-      </p>
+    <section class="gateway-boot">
+
+      <div class="gateway-boot-header">
+        <div>
+          <p class="gateway-boot-eyebrow">INFRASTRUCTURE / LLM GATEWAY</p>
+
+          <h1>LLM Rate Limiter Gateway</h1>
+
+          <p class="gateway-boot-subtitle">
+            A multi-tenant gateway for controlling LLM traffic, token usage,
+            cost and provider failures.
+          </p>
+        </div>
+
+        <div class="gateway-boot-status">
+          <span class="gateway-boot-status-dot"></span>
+          <span>INITIALIZING</span>
+        </div>
+      </div>
+
+
+      <div class="gateway-architecture">
+
+        <div class="architecture-intro">
+          <p class="gateway-boot-label">SYSTEM ARCHITECTURE</p>
+
+          <h2>Request protection before the LLM</h2>
+
+          <p>
+            Every request passes through admission control, capacity management,
+            tenant budget reservation and provider resilience before the final
+            cost is settled against actual token usage.
+          </p>
+        </div>
+
+
+        <div class="architecture-flow">
+
+          <div class="architecture-node architecture-node-entry">
+            <span class="architecture-node-index">01</span>
+
+            <div>
+              <strong>Incoming request</strong>
+              <span>Tenant + prompt</span>
+            </div>
+          </div>
+
+          <span class="architecture-arrow">→</span>
+
+
+          <div class="architecture-node">
+            <span class="architecture-node-index">02</span>
+
+            <div>
+              <strong>Admission control</strong>
+              <span>Sliding window</span>
+            </div>
+          </div>
+
+          <span class="architecture-arrow">→</span>
+
+
+          <div class="architecture-node">
+            <span class="architecture-node-index">03</span>
+
+            <div>
+              <strong>Token capacity</strong>
+              <span>Redis token bucket</span>
+            </div>
+          </div>
+
+          <span class="architecture-arrow">→</span>
+
+
+          <div class="architecture-node">
+            <span class="architecture-node-index">04</span>
+
+            <div>
+              <strong>Budget reservation</strong>
+              <span>Atomic tenant quota</span>
+            </div>
+          </div>
+
+        </div>
+
+
+        <div class="architecture-flow architecture-flow-secondary">
+
+          <div class="architecture-node architecture-node-redis">
+            <span class="architecture-node-index">REDIS</span>
+
+            <div>
+              <strong>Redis + Lua</strong>
+              <span>Atomic rate &amp; quota operations</span>
+            </div>
+          </div>
+
+          <span class="architecture-arrow">→</span>
+
+
+          <div class="architecture-node architecture-node-provider">
+            <span class="architecture-node-index">05</span>
+
+            <div>
+              <strong>LLM provider</strong>
+              <span>Primary / fallback</span>
+            </div>
+          </div>
+
+          <span class="architecture-arrow">→</span>
+
+
+          <div class="architecture-node">
+            <span class="architecture-node-index">06</span>
+
+            <div>
+              <strong>Settlement</strong>
+              <span>Actual token usage &amp; cost</span>
+            </div>
+          </div>
+
+        </div>
+
+
+        <div class="architecture-capabilities">
+
+          <div>
+            <span>RATE LIMITING</span>
+            <strong>Sliding Window + Token Bucket</strong>
+          </div>
+
+          <div>
+            <span>COST CONTROL</span>
+            <strong>Atomic reservation + settlement</strong>
+          </div>
+
+          <div>
+            <span>RESILIENCE</span>
+            <strong>Retry + Circuit Breaker + Fallback</strong>
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <div class="gateway-boot-footer">
+
+        <div class="gateway-boot-progress">
+          <span class="gateway-boot-spinner"></span>
+
+          <div>
+            <strong>{{ backendCheckMessage() }}</strong>
+
+            <span>
+              No LLM request is being sent while the gateway starts.
+            </span>
+          </div>
+        </div>
+
+        <div class="gateway-boot-note">
+          <strong>Why the wait?</strong>
+
+          <span>
+            This demo runs on a free-tier backend that may sleep after
+            inactivity. It normally wakes automatically within about a minute.
+          </span>
+        </div>
+
+      </div>
+
+    </section>
+
+    } @else {
+
+    <header class="dashboard-header">
+      <div class="header-copy">
+        <p class="eyebrow">INFRASTRUCTURE / LLM GATEWAY</p>
+
+        <h1>LLM Rate Limiter Gateway</h1>
+
+        <p class="subtitle">
+          Distributed rate limiting, cost control &amp; provider resilience
+        </p>
+      </div>
+
+      <div class="header-status">
+        <span class="status-dot"></span>
+        <span>OPERATIONAL</span>
+      </div>
+    </header>
+a
+
+    <div class="toolbar">
+
+      <div class="tenant-context">
+        <span class="label">TENANT</span>
+
+        <input id="tenant-toolbar" class="tenant-input" type="text" [value]="tenantId()"
+          (input)="onTenantIdChange($any($event.target).value)" [disabled]="isSending()"
+          placeholder="Enter tenant ID" />
+      </div>
+
+      <button class="refresh-button" type="button" (click)="refreshStatus()">
+        <span class="refresh-icon">↻</span>
+        Refresh
+      </button>
+
     </div>
 
-    <div class="header-status">
-      <span class="status-dot"></span>
-      <span>OPERATIONAL</span>
-    </div>
-  </header>
 
-
-  <div class="toolbar">
-
-    <div class="tenant-context">
-      <span class="label">TENANT</span>
-
-      <input
-        id="tenant-toolbar"
-        class="tenant-input"
-        type="text"
-        [value]="tenantId()"
-        (input)="onTenantIdChange($any($event.target).value)"
-        [disabled]="isSending()"
-        placeholder="Enter tenant ID"
-      />
-    </div>
-
-    <button
-      class="refresh-button"
-      type="button"
-      (click)="refreshStatus()"
-    >
-      <span class="refresh-icon">↻</span>
-      Refresh
-    </button>
-
-  </div>
-
-
-  @if (status(); as gateway) {
+    @if (status(); as gateway) {
 
     <section class="metrics-grid">
 
@@ -71,13 +239,10 @@
         </div>
 
         <div class="progress-track">
-          <div
-            class="progress-fill brand-fill"
-            [style.width.%]="
+          <div class="progress-fill brand-fill" [style.width.%]="
               (gateway.tokenBucket.availableTokens /
                 gateway.tokenBucket.capacity) * 100
-            "
-          ></div>
+            "></div>
         </div>
 
         <div class="metric-footer">
@@ -112,13 +277,10 @@
         </div>
 
         <div class="progress-track">
-          <div
-            class="progress-fill indigo-fill"
-            [style.width.%]="
+          <div class="progress-fill indigo-fill" [style.width.%]="
               (gateway.slidingWindow.currentRequests /
                 gateway.slidingWindow.maxRequests) * 100
-            "
-          ></div>
+            "></div>
         </div>
 
         <div class="metric-footer">
@@ -150,9 +312,7 @@
         </div>
 
         <div class="progress-track">
-          <div
-            class="progress-fill teal-fill"
-            [style.width.%]="
+          <div class="progress-fill teal-fill" [style.width.%]="
               (
                 gateway.dailyBudget.remainingMicrodollars /
                 (
@@ -160,8 +320,7 @@
                   gateway.dailyBudget.spentMicrodollars
                 )
               ) * 100
-            "
-          ></div>
+            "></div>
         </div>
 
         <div class="metric-footer">
@@ -202,14 +361,8 @@
 
         <label for="prompt">Prompt</label>
 
-        <textarea
-          id="prompt"
-          rows="6"
-          placeholder="Enter a prompt to send through the gateway..."
-          [value]="prompt()"
-          (input)="onPromptChange($any($event.target).value)"
-          [disabled]="isSending()"
-        ></textarea>
+        <textarea id="prompt" rows="6" placeholder="Enter a prompt to send through the gateway..." [value]="prompt()"
+          (input)="onPromptChange($any($event.target).value)" [disabled]="isSending()"></textarea>
 
 
         <div class="playground-footer">
@@ -218,26 +371,21 @@
             {{ prompt().length }} / 10,000 characters
           </span>
 
-          <button
-            class="primary-button"
-            type="button"
-            (click)="sendRequest()"
-            [disabled]="isSending()"
-          >
+          <button class="primary-button" type="button" (click)="sendRequest()" [disabled]="isSending()">
 
             @if (isSending()) {
 
-              <span class="button-content">
-                <span class="button-spinner"></span>
-                Sending...
-              </span>
+            <span class="button-content">
+              <span class="button-spinner"></span>
+              Sending...
+            </span>
 
             } @else {
 
-              <span class="button-content">
-                Send Request
-                <span class="button-arrow">→</span>
-              </span>
+            <span class="button-content">
+              Send Request
+              <span class="button-arrow">→</span>
+            </span>
 
             }
 
@@ -269,10 +417,7 @@
 
         <div class="breaker-state">
 
-          <span
-            class="status-dot"
-            [class.open]="gateway.circuitBreaker.state !== 'CLOSED'"
-          ></span>
+          <span class="status-dot" [class.open]="gateway.circuitBreaker.state !== 'CLOSED'"></span>
 
           <span>
             {{ gateway.circuitBreaker.state }}
@@ -296,11 +441,7 @@
 
             <strong>
               {{
-                gateway.circuitBreaker.failureRate < 0
-                  ? '—'
-                  : gateway.circuitBreaker.failureRate + '%'
-              }}
-            </strong>
+              gateway.circuitBreaker.failureRate < 0 ? '—' : gateway.circuitBreaker.failureRate + '%' }} </strong>
           </div>
 
           <div>
@@ -408,47 +549,47 @@
 
     @if (requestError(); as requestError) {
 
-      <section class="request-error-panel">
+    <section class="request-error-panel">
 
-        <div class="error-indicator">!</div>
+      <div class="error-indicator">!</div>
 
-        <div class="error-content">
+      <div class="error-content">
 
-          <div class="error-heading">
+        <div class="error-heading">
 
-            <span class="error-title">
-              {{ requestError.title }}
-            </span>
+          <span class="error-title">
+            {{ requestError.title }}
+          </span>
 
-            <span class="error-status">
-              HTTP {{ requestError.status }}
-            </span>
+          <span class="error-status">
+            HTTP {{ requestError.status }}
+          </span>
 
-          </div>
+        </div>
 
-          <p>
-            {{ requestError.message }}
-          </p>
+        <p>
+          {{ requestError.message }}
+        </p>
 
-          @if (requestError.retryAfterSeconds !== undefined) {
+        @if (requestError.retryAfterSeconds !== undefined) {
 
-            <div class="retry-info">
+        <div class="retry-info">
 
-              @if (retryCountdown() !== null) {
-                Retry available in
-                <strong>{{ retryCountdown() }}s</strong>
-              } @else {
-                Retry after
-                <strong>{{ requestError.retryAfterSeconds }}s</strong>
-              }
-
-            </div>
-
+          @if (retryCountdown() !== null) {
+          Retry available in
+          <strong>{{ retryCountdown() }}s</strong>
+          } @else {
+          Retry after
+          <strong>{{ requestError.retryAfterSeconds }}s</strong>
           }
 
         </div>
 
-      </section>
+        }
+
+      </div>
+
+    </section>
 
     }
 
@@ -468,7 +609,7 @@
         </div>
 
         @if (lastResponse()) {
-          <span class="success-badge">SUCCESS</span>
+        <span class="success-badge">SUCCESS</span>
         }
 
       </div>
@@ -476,126 +617,124 @@
 
       @if (lastResponse(); as result) {
 
-        <div class="request-summary">
+      <div class="request-summary">
 
-          <div class="summary-item">
-            <span>MODEL</span>
-            <strong>{{ result.response.modelUsed }}</strong>
-          </div>
-
-          <div class="summary-item">
-            <span>TOTAL TOKENS</span>
-            <strong>{{ result.response.usage.totalTokens }}</strong>
-          </div>
-
-          <div class="summary-item">
-            <span>INPUT</span>
-            <strong>{{ result.response.usage.inputTokens }}</strong>
-          </div>
-
-          <div class="summary-item">
-            <span>OUTPUT</span>
-            <strong>{{ result.response.usage.outputTokens }}</strong>
-          </div>
-
-          <div class="summary-item">
-            <span>LATENCY</span>
-            <strong>{{ result.latencyMs }} ms</strong>
-          </div>
-
-          <div class="summary-item">
-            <span>ESTIMATED COST</span>
-
-            <strong>
-              ${{ result.estimatedCostMicrodollars / 1000000 | number: '1.2-6' }}
-            </strong>
-          </div>
-
-          <div class="summary-item">
-            <span>ACTUAL COST</span>
-
-            <strong>
-              ${{ result.actualCostMicrodollars / 1000000 | number: '1.2-6' }}
-            </strong>
-          </div>
-
+        <div class="summary-item">
+          <span>MODEL</span>
+          <strong>{{ result.response.modelUsed }}</strong>
         </div>
 
-
-        <div class="settlement">
-
-          <div>
-            <span>Budget reserved</span>
-
-            <strong>
-              ${{ result.settlement.reservedMicrodollars / 1000000 | number: '1.2-6' }}
-            </strong>
-          </div>
-
-          <div>
-            <span>Actual usage</span>
-
-            <strong>
-              ${{ result.settlement.actualMicrodollars / 1000000 | number: '1.2-6' }}
-            </strong>
-          </div>
-
-          <div>
-            <span>Adjustment</span>
-
-            <strong
-              [class.refund]="result.settlement.adjustmentMicrodollars < 0"
-            >
-              ${{ result.settlement.adjustmentMicrodollars / 1000000 | number: '1.2-6' }}
-            </strong>
-          </div>
-
+        <div class="summary-item">
+          <span>TOTAL TOKENS</span>
+          <strong>{{ result.response.usage.totalTokens }}</strong>
         </div>
 
-
-        <div class="response-content">
-
-          <span class="response-label">
-            MODEL RESPONSE
-          </span>
-
-          <p>
-            {{ result.response.completion }}
-          </p>
-
+        <div class="summary-item">
+          <span>INPUT</span>
+          <strong>{{ result.response.usage.inputTokens }}</strong>
         </div>
+
+        <div class="summary-item">
+          <span>OUTPUT</span>
+          <strong>{{ result.response.usage.outputTokens }}</strong>
+        </div>
+
+        <div class="summary-item">
+          <span>LATENCY</span>
+          <strong>{{ result.latencyMs }} ms</strong>
+        </div>
+
+        <div class="summary-item">
+          <span>ESTIMATED COST</span>
+
+          <strong>
+            ${{ result.estimatedCostMicrodollars / 1000000 | number: '1.2-6' }}
+          </strong>
+        </div>
+
+        <div class="summary-item">
+          <span>ACTUAL COST</span>
+
+          <strong>
+            ${{ result.actualCostMicrodollars / 1000000 | number: '1.2-6' }}
+          </strong>
+        </div>
+
+      </div>
+
+
+      <div class="settlement">
+
+        <div>
+          <span>Budget reserved</span>
+
+          <strong>
+            ${{ result.settlement.reservedMicrodollars / 1000000 | number: '1.2-6' }}
+          </strong>
+        </div>
+
+        <div>
+          <span>Actual usage</span>
+
+          <strong>
+            ${{ result.settlement.actualMicrodollars / 1000000 | number: '1.2-6' }}
+          </strong>
+        </div>
+
+        <div>
+          <span>Adjustment</span>
+
+          <strong [class.refund]="result.settlement.adjustmentMicrodollars < 0">
+            ${{ result.settlement.adjustmentMicrodollars / 1000000 | number: '1.2-6' }}
+          </strong>
+        </div>
+
+      </div>
+
+
+      <div class="response-content">
+
+        <span class="response-label">
+          MODEL RESPONSE
+        </span>
+
+        <p>
+          {{ result.response.completion }}
+        </p>
+
+      </div>
 
       } @else {
 
-        <div class="empty-state">
+      <div class="empty-state">
 
-          <div class="empty-icon">
-            →
-          </div>
-
-          <p>
-            No requests submitted yet
-          </p>
-
-          <span>
-            Send a request from the playground to see gateway activity.
-          </span>
-
+        <div class="empty-icon">
+          →
         </div>
+
+        <p>
+          No requests submitted yet
+        </p>
+
+        <span>
+          Send a request from the playground to see gateway activity.
+        </span>
+
+      </div>
 
       }
 
     </section>
 
-  }
+    }
 
 
-  @if (error(); as message) {
+    @if (error(); as message) {
 
     <div class="error-banner">
       {{ message }}
     </div>
+    }
+    }
 
-  }
-
-</div>
+  </div>

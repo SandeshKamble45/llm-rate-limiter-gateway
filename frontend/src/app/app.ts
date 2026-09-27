@@ -35,12 +35,40 @@ export class App {
   readonly lastResponse = signal<GatewayResponse | null>(null);
   readonly requestError = signal<RequestError | null>(null);
   readonly retryCountdown = signal<number | null>(null);
+  readonly backendReady = signal(false);
+  readonly backendChecking = signal(true);
+  readonly backendCheckMessage = signal('Connecting to gateway...');
 
   private retryTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
-    this.loadStatus();
+    this.checkBackendHealth();
   }
+
+  private checkBackendHealth(): void {
+  this.backendChecking.set(true);
+  this.backendCheckMessage.set('Connecting to gateway...');
+
+  this.gatewayApi.health().subscribe({
+    next: () => {
+      this.backendReady.set(true);
+      this.backendChecking.set(false);
+      this.backendCheckMessage.set('Gateway ready');
+      this.loadStatus();
+    },
+    error: () => {
+      this.backendReady.set(false);
+      this.backendChecking.set(true);
+      this.backendCheckMessage.set(
+        'The free-tier backend is waking up. Checking again automatically...'
+      );
+
+      setTimeout(() => {
+        this.checkBackendHealth();
+      }, 3000);
+    }
+  });
+}
 
   loadStatus(): void {
     const tenant = this.tenantId().trim();
@@ -238,32 +266,32 @@ export class App {
   }
 
   private startRetryCountdown(seconds: number): void {
-  this.stopRetryCountdown();
+    this.stopRetryCountdown();
 
-  this.retryCountdown.set(seconds);
+    this.retryCountdown.set(seconds);
 
-  this.retryTimer = setInterval(() => {
-    const remaining = this.retryCountdown();
+    this.retryTimer = setInterval(() => {
+      const remaining = this.retryCountdown();
 
-    if (remaining === null) {
-      this.stopRetryCountdown();
-      return;
-    }
+      if (remaining === null) {
+        this.stopRetryCountdown();
+        return;
+      }
 
-    if (remaining <= 1) {
-      this.stopRetryCountdown();
-      this.retryCountdown.set(0);
+      if (remaining <= 1) {
+        this.stopRetryCountdown();
+        this.retryCountdown.set(0);
 
-      // The rate-limit window has expired.
-      // Refresh Redis-backed gateway state automatically.
-      this.refreshStatus();
+        // The rate-limit window has expired.
+        // Refresh Redis-backed gateway state automatically.
+        this.refreshStatus();
 
-      return;
-    }
+        return;
+      }
 
-    this.retryCountdown.set(remaining - 1);
-  }, 1000);
-}
+      this.retryCountdown.set(remaining - 1);
+    }, 1000);
+  }
 
   private stopRetryCountdown(): void {
     if (this.retryTimer !== null) {

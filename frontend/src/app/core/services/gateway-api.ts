@@ -2,7 +2,11 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
-import { ChatRequest, GatewayResponse, GatewayStatus } from '../models/gateway.models';
+import {
+  ChatRequest,
+  GatewayResponse,
+  GatewayStatus
+} from '../models/gateway.models';
 
 @Injectable({
   providedIn: 'root',
@@ -22,5 +26,9 @@ export class GatewayApi {
 
   sendChat(request: ChatRequest): Observable<GatewayResponse> {
     return this.http.post<GatewayResponse>(`${this.baseUrl}/chat`, request);
+  }
+
+  health(): Observable<{ status: string }> {
+    return this.http.get<{ status: string }>('/actuator/health');
   }
 }
