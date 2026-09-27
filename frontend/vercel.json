@@ -1,5 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "angular",
+  "outputDirectory": "dist/frontend/browser",
   "rewrites": [
     {
       "source": "/api/:path*",
