@@ -5,7 +5,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://llm-rate-limiter-gateway.onrender.com/api/:path*"
+      "destination": "https://llm-rate-limiter-gateway.onrender.com/:path*"
     },
     {
       "source": "/actuator/:path*",
