@@ -3,178 +3,32 @@
 
     @if (!backendReady()) {
 
-    <section class="gateway-boot">
+     <section class="gateway-boot">
 
-      <div class="gateway-boot-header">
-        <div>
-          <p class="gateway-boot-eyebrow">INFRASTRUCTURE / LLM GATEWAY</p>
+    <div class="gateway-boot-content">
 
-          <h1>LLM Rate Limiter Gateway</h1>
+      <p class="gateway-boot-eyebrow">
+        INFRASTRUCTURE / LLM GATEWAY
+      </p>
 
-          <p class="gateway-boot-subtitle">
-            A multi-tenant gateway for controlling LLM traffic, token usage,
-            cost and provider failures.
-          </p>
-        </div>
+      <h1>LLM Rate Limiter Gateway</h1>
 
-        <div class="gateway-boot-status">
-          <span class="gateway-boot-status-dot"></span>
-          <span>INITIALIZING</span>
-        </div>
+      <div class="gateway-boot-loader">
+        <span class="gateway-boot-spinner"></span>
       </div>
 
+      <p class="gateway-boot-message">
+        {{ backendCheckMessage() }}
+      </p>
 
-      <div class="gateway-architecture">
+      <p class="gateway-boot-description">
+        The free-tier backend may take a few seconds to wake after inactivity.
+      </p>
 
-        <div class="architecture-intro">
-          <p class="gateway-boot-label">SYSTEM ARCHITECTURE</p>
+    </div>
 
-          <h2>Request protection before the LLM</h2>
-
-          <p>
-            Every request passes through admission control, capacity management,
-            tenant budget reservation and provider resilience before the final
-            cost is settled against actual token usage.
-          </p>
-        </div>
-
-
-        <div class="architecture-flow">
-
-          <div class="architecture-node architecture-node-entry">
-            <span class="architecture-node-index">01</span>
-
-            <div>
-              <strong>Incoming request</strong>
-              <span>Tenant + prompt</span>
-            </div>
-          </div>
-
-          <span class="architecture-arrow">→</span>
-
-
-          <div class="architecture-node">
-            <span class="architecture-node-index">02</span>
-
-            <div>
-              <strong>Admission control</strong>
-              <span>Sliding window</span>
-            </div>
-          </div>
-
-          <span class="architecture-arrow">→</span>
-
-
-          <div class="architecture-node">
-            <span class="architecture-node-index">03</span>
-
-            <div>
-              <strong>Token capacity</strong>
-              <span>Redis token bucket</span>
-            </div>
-          </div>
-
-          <span class="architecture-arrow">→</span>
-
-
-          <div class="architecture-node">
-            <span class="architecture-node-index">04</span>
-
-            <div>
-              <strong>Budget reservation</strong>
-              <span>Atomic tenant quota</span>
-            </div>
-          </div>
-
-        </div>
-
-
-        <div class="architecture-flow architecture-flow-secondary">
-
-          <div class="architecture-node architecture-node-redis">
-            <span class="architecture-node-index">REDIS</span>
-
-            <div>
-              <strong>Redis + Lua</strong>
-              <span>Atomic rate &amp; quota operations</span>
-            </div>
-          </div>
-
-          <span class="architecture-arrow">→</span>
-
-
-          <div class="architecture-node architecture-node-provider">
-            <span class="architecture-node-index">05</span>
-
-            <div>
-              <strong>LLM provider</strong>
-              <span>Primary / fallback</span>
-            </div>
-          </div>
-
-          <span class="architecture-arrow">→</span>
-
-
-          <div class="architecture-node">
-            <span class="architecture-node-index">06</span>
-
-            <div>
-              <strong>Settlement</strong>
-              <span>Actual token usage &amp; cost</span>
-            </div>
-          </div>
-
-        </div>
-
-
-        <div class="architecture-capabilities">
-
-          <div>
-            <span>RATE LIMITING</span>
-            <strong>Sliding Window + Token Bucket</strong>
-          </div>
-
-          <div>
-            <span>COST CONTROL</span>
-            <strong>Atomic reservation + settlement</strong>
-          </div>
-
-          <div>
-            <span>RESILIENCE</span>
-            <strong>Retry + Circuit Breaker + Fallback</strong>
-          </div>
-
-        </div>
-
-      </div>
-
-
-      <div class="gateway-boot-footer">
-
-        <div class="gateway-boot-progress">
-          <span class="gateway-boot-spinner"></span>
-
-          <div>
-            <strong>{{ backendCheckMessage() }}</strong>
-
-            <span>
-              No LLM request is being sent while the gateway starts.
-            </span>
-          </div>
-        </div>
-
-        <div class="gateway-boot-note">
-          <strong>Why the wait?</strong>
-
-          <span>
-            This demo runs on a free-tier backend that may sleep after
-            inactivity. It normally wakes automatically within about a minute.
-          </span>
-        </div>
-
-      </div>
-
-    </section>
+  </section>
+      
 
     } @else {
 
