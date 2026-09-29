@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient , HttpHeaders  } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
 import {
@@ -24,9 +24,23 @@ export class GatewayApi {
     });
   }
 
-  sendChat(request: ChatRequest): Observable<GatewayResponse> {
-    return this.http.post<GatewayResponse>(`${this.baseUrl}/chat`, request);
-  }
+    sendChat(request: ChatRequest,demoAccessCode?: string): Observable<GatewayResponse> {
+
+        let headers = new HttpHeaders();
+
+        if (demoAccessCode) {
+          headers = headers.set(
+            'X-Demo-Access-Code',
+            demoAccessCode
+          );
+        }
+
+        return this.http.post<GatewayResponse>(
+          `${this.baseUrl}/chat`,
+          request,
+          { headers }
+        );
+    }
 
   health(): Observable<{ status: string }> {
     return this.http.get<{ status: string }>('/actuator/health');

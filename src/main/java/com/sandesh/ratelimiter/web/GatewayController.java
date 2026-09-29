@@ -19,6 +19,7 @@ import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.beans.factory.annotation.Value;
 
 @RestController
 @RequestMapping("/v1/gateway")
@@ -26,6 +27,9 @@ public class GatewayController {
 
         private static final int MAX_PROMPT_LENGTH = 10_000;
         private static final long MAX_OUTPUT_TOKENS = 150;
+
+        @Value("${DEMO_ACCESS_CODE:}")
+        private String demoAccessCode;
 
         private final TokenBucketRateLimiter tokenBucketLimiter;
         private final SlidingWindowRateLimiter slidingWindowLimiter;
@@ -86,7 +90,12 @@ public class GatewayController {
 
         @PostMapping("/chat")
         public ResponseEntity<?> chat(
-                        @RequestBody ChatRequest request) {
+                        @RequestBody ChatRequest request,
+                        @RequestHeader(
+                                value = "X-Demo-Access-Code",
+                                required = false)
+                        String demoAccessCodeHeader
+                        ) {
 
                 if (request == null) {
                         return ResponseEntity.badRequest()
@@ -122,7 +131,24 @@ public class GatewayController {
                 String tenantId = request.tenantId().trim();
                 String prompt = request.prompt();
 
-                String model = llmProviderClient.getPrimaryModel();
+                String model = request.model();
+
+                if (model == null || model.isBlank()) {
+                model = llmProviderClient.getPrimaryModel();
+                }
+
+                if (!model.equals(llmProviderClient.getPrimaryModel())) {
+
+                if (demoAccessCode == null
+                        || demoAccessCode.isBlank()
+                        || demoAccessCodeHeader == null
+                        || !demoAccessCode.equals(demoAccessCodeHeader)) {
+
+                        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                                .body("Invalid or missing demo access code");
+                }
+                }
+
                 String tenantKey = tenantId + ":" + model;
 
                 /*
@@ -213,7 +239,7 @@ public class GatewayController {
 
                 try {
 
-                        response = llmProviderClient.callPrimaryModel(prompt);
+                        response = llmProviderClient.callModel(model, prompt);
 
                         long latencyNanos = System.nanoTime() - llmStartNanos;
 
@@ -331,7 +357,8 @@ public class GatewayController {
 
         public record ChatRequest(
                         String tenantId,
-                        String prompt) {
+                        String prompt,
+                        String model) {
         }
 
         public record GatewayResponse(

@@ -33,6 +33,7 @@ import java.time.ZoneOffset;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.doThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -101,7 +102,7 @@ class GatewayControllerIntegrationTest {
         .thenReturn("primary-model");
 
     redisTemplate.delete(
-        "ratelimit:tb:test-tenant:default-model");
+        "ratelimit:tb:test-tenant:primary-model");
 
     redisTemplate.delete(
         "ratelimit:sw:test-tenant");
@@ -111,7 +112,7 @@ class GatewayControllerIntegrationTest {
             + LocalDate.now(ZoneOffset.UTC));
 
     redisTemplate.delete(
-        "ratelimit:tb:rate-limit-tenant:default-model");
+        "ratelimit:tb:rate-limit-tenant:primary-model");
 
     redisTemplate.delete(
         "ratelimit:sw:rate-limit-tenant");
@@ -121,7 +122,7 @@ class GatewayControllerIntegrationTest {
             + LocalDate.now(ZoneOffset.UTC));
 
     redisTemplate.delete(
-        "ratelimit:tb:token-count-tenant:default-model");
+        "ratelimit:tb:token-count-tenant:primary-model");
 
     redisTemplate.delete(
         "ratelimit:sw:token-count-tenant");
@@ -134,7 +135,7 @@ class GatewayControllerIntegrationTest {
   @Test
   void shouldProcessValidChatRequest() throws Exception {
 
-    when(llmProviderClient.callPrimaryModel(anyString()))
+    when(llmProviderClient.callModel(eq("primary-model"), anyString()))
         .thenReturn(
             new LlmProvider.LlmResponse(
                 "primary-model",
@@ -238,7 +239,7 @@ class GatewayControllerIntegrationTest {
   void shouldRejectRequestWhenSlidingWindowIsFull()
       throws Exception {
 
-    when(llmProviderClient.callPrimaryModel(anyString()))
+    when(llmProviderClient.callModel(eq("primary-model"),anyString()))
         .thenReturn(
             new LlmProvider.LlmResponse(
                 "primary-model",
@@ -286,7 +287,7 @@ class GatewayControllerIntegrationTest {
         1,
         tokenCounter.countTokens(prompt));
 
-    when(llmProviderClient.callPrimaryModel(anyString()))
+    when(llmProviderClient.callModel(eq("primary-model"),anyString()))
         .thenReturn(
             new LlmProvider.LlmResponse(
                 "primary-model",
@@ -344,7 +345,9 @@ class GatewayControllerIntegrationTest {
     doThrow(
         new RuntimeException("Provider unavailable"))
         .when(llmProviderClient)
-        .callPrimaryModel(anyString());
+        .callModel(
+            eq("primary-model"),
+            anyString());
 
     mockMvc.perform(
         post("/v1/gateway/chat")

@@ -49,20 +49,43 @@
     </header>
 
     <div class="toolbar">
-
       <div class="tenant-context">
         <span class="label">TENANT</span>
 
-        <input id="tenant-toolbar" class="tenant-input" type="text" [value]="tenantId()"
-          (input)="onTenantIdChange($any($event.target).value)" [disabled]="isSending()"
-          placeholder="Enter tenant ID" />
+        <input
+          id="tenant-toolbar"
+          class="tenant-input"
+          type="text"
+          [value]="tenantId()"
+          (input)="onTenantIdChange($any($event.target).value)"
+          [disabled]="isSending()"
+          placeholder="Enter tenant ID"
+        />
+      </div>
+
+      <div class="model-context">
+        <span class="label">MODEL</span>
+
+        <select
+          id="model-selector"
+          class="model-select"
+          [value]="selectedModel()"
+          (change)="selectModel($any($event.target).value)"
+          [disabled]="isSending()"
+        >
+          <option value="primary-model">Mock Provider</option>
+          <option value="gpt-5-mini">GPT-5 mini · Live</option>
+        </select>
+
+        @if (liveModelEnabled()) {
+          <span class="live-model-badge">LIVE</span>
+        }
       </div>
 
       <button class="refresh-button" type="button" (click)="refreshStatus()">
         <span class="refresh-icon">↻</span>
         Refresh
       </button>
-
     </div>
 
 
@@ -587,6 +610,58 @@
       {{ message }}
     </div>
     }
+    }
+
+    @if (showLiveAccessModal()) {
+      <div class="demo-access-overlay">
+        <div
+          class="demo-access-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="live-model-title"
+        >
+          <div class="panel-header">
+            <div>
+              <p class="card-label">LIVE MODEL</p>
+
+              <h2 id="live-model-title">Enable live model</h2>
+
+              <p class="panel-description">
+                GPT-5 mini uses the configured OpenAI provider.
+              </p>
+            </div>
+          </div>
+
+          <label for="demo-access-code">Demo access code</label>
+
+          <input
+            #demoAccessCodeInput
+            id="demo-access-code"
+            type="password"
+            autocomplete="off"
+            placeholder="Enter demo access code"
+            [disabled]="isSending()"
+          />
+
+          <div class="demo-access-actions">
+            <button
+              class="secondary-button"
+              type="button"
+              (click)="cancelLiveModel()"
+            >
+              Cancel
+            </button>
+
+            <button
+              class="primary-button"
+              type="button"
+              (click)="enableLiveModel(demoAccessCodeInput.value)"
+            >
+              Enable Live Model
+            </button>
+          </div>
+        </div>
+      </div>
     }
 
   </div>

@@ -65,4 +65,6 @@ export interface GatewayResponse {
 export interface ChatRequest {
   tenantId: string;
   prompt: string;
+  model: string;
+
 }

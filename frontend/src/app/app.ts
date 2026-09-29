@@ -32,6 +32,11 @@ export class App {
   readonly prompt = signal('');
   readonly isSending = signal(false);
 
+  readonly selectedModel = signal('primary-model');
+  readonly liveAccessCode = signal('');
+  readonly showLiveAccessModal = signal(false);
+  readonly liveModelEnabled = signal(false);
+
   readonly lastResponse = signal<GatewayResponse | null>(null);
   readonly requestError = signal<RequestError | null>(null);
   readonly retryCountdown = signal<number | null>(null);
@@ -130,8 +135,13 @@ export class App {
 
     this.gatewayApi.sendChat({
       tenantId: tenant,
-      prompt: currentPrompt
-    }).subscribe({
+      prompt: currentPrompt,
+      model: this.selectedModel()
+    },
+    this.liveModelEnabled()
+    ? this.liveAccessCode()
+    : undefined
+   ).subscribe({
       next: (response) => {
         console.log('CHAT RESPONSE:', response);
 
@@ -156,6 +166,12 @@ export class App {
         const requestError = this.mapRequestError(error);
 
         this.requestError.set(requestError);
+
+        if (error.status === 403) {
+          this.liveModelEnabled.set(false);
+          this.liveAccessCode.set('');
+          this.selectedModel.set('primary-model');
+        }
 
         if (
           requestError.status === 429 &&
@@ -237,6 +253,14 @@ export class App {
       };
     }
 
+    if (status === 403) {
+      return {
+        status: 403,
+        title: 'LIVE MODEL ACCESS DENIED',
+        message: 'The demo access code is invalid or missing.'
+       };
+    }
+
     if (status === 400) {
       const message =
         typeof error.error === 'string'
@@ -255,6 +279,34 @@ export class App {
       title: 'REQUEST FAILED',
       message: 'The gateway could not complete the request.'
     };
+  }
+
+    selectModel(model: string): void {
+    if (model === 'gpt-5-mini') {
+      this.showLiveAccessModal.set(true);
+      return;
+    }
+
+      this.selectedModel.set(model);
+      this.liveModelEnabled.set(false);
+      this.liveAccessCode.set('');
+    }
+
+  enableLiveModel(code: string): void {
+    const trimmedCode = code.trim();
+
+    if (!trimmedCode) {
+      return;
+    }
+
+    this.liveAccessCode.set(trimmedCode);
+    this.selectedModel.set('gpt-5-mini');
+    this.liveModelEnabled.set(true);
+    this.showLiveAccessModal.set(false);
+  }
+
+  cancelLiveModel(): void {
+    this.showLiveAccessModal.set(false);
   }
 
   onTenantIdChange(value: string): void {
