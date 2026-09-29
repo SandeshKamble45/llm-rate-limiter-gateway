@@ -3,7 +3,7 @@
 
     @if (!backendReady()) {
 
-     <section class="gateway-boot">
+    <section class="gateway-boot">
 
     <div class="gateway-boot-content">
 
@@ -27,7 +27,7 @@
 
     </div>
 
-  </section>
+    </section>
       
 
     } @else {
@@ -49,43 +49,53 @@
     </header>
 
     <div class="toolbar">
-      <div class="tenant-context">
-        <span class="label">TENANT</span>
 
-        <input
-          id="tenant-toolbar"
-          class="tenant-input"
-          type="text"
-          [value]="tenantId()"
-          (input)="onTenantIdChange($any($event.target).value)"
-          [disabled]="isSending()"
-          placeholder="Enter tenant ID"
-        />
+      <div class="toolbar-contexts">
+
+        <div class="tenant-context">
+          <span class="label">TENANT</span>
+
+          <input
+            id="tenant-toolbar"
+            class="tenant-input"
+            type="text"
+            [value]="tenantId()"
+            (input)="onTenantIdChange($any($event.target).value)"
+            [disabled]="isSending()"
+            placeholder="Enter tenant ID"
+          />
+        </div>
+
+        <div class="model-context">
+          <span class="label">MODEL</span>
+
+          <select
+            id="model-selector"
+            class="model-select"
+            [value]="selectedModel()"
+            (change)="selectModel($any($event.target).value)"
+            [disabled]="isSending()"
+          >
+            <option value="primary-model">Mock Provider</option>
+            <option value="gpt-5-mini">GPT-5 mini · Live</option>
+          </select>
+
+          @if (liveModelEnabled()) {
+            <span class="live-model-badge">LIVE</span>
+          }
+        </div>
+
       </div>
 
-      <div class="model-context">
-        <span class="label">MODEL</span>
-
-        <select
-          id="model-selector"
-          class="model-select"
-          [value]="selectedModel()"
-          (change)="selectModel($any($event.target).value)"
-          [disabled]="isSending()"
-        >
-          <option value="primary-model">Mock Provider</option>
-          <option value="gpt-5-mini">GPT-5 mini · Live</option>
-        </select>
-
-        @if (liveModelEnabled()) {
-          <span class="live-model-badge">LIVE</span>
-        }
-      </div>
-
-      <button class="refresh-button" type="button" (click)="refreshStatus()">
+      <button
+        class="refresh-button"
+        type="button"
+        (click)="refreshStatus()"
+      >
         <span class="refresh-icon">↻</span>
         Refresh
       </button>
+
     </div>
 
 
@@ -494,32 +504,32 @@
 
       <div class="request-summary">
 
-        <div class="summary-item">
+        <div class="summary-item summary-model">
           <span>MODEL</span>
           <strong>{{ result.response.modelUsed }}</strong>
         </div>
 
-        <div class="summary-item">
+        <div class="summary-item summary-tokens">
           <span>TOTAL TOKENS</span>
           <strong>{{ result.response.usage.totalTokens }}</strong>
         </div>
 
-        <div class="summary-item">
+        <div class="summary-item summary-input">
           <span>INPUT</span>
           <strong>{{ result.response.usage.inputTokens }}</strong>
         </div>
 
-        <div class="summary-item">
+        <div class="summary-item summary-output">
           <span>OUTPUT</span>
           <strong>{{ result.response.usage.outputTokens }}</strong>
         </div>
 
-        <div class="summary-item">
+        <div class="summary-item summary-latency">
           <span>LATENCY</span>
           <strong>{{ result.latencyMs }} ms</strong>
         </div>
 
-        <div class="summary-item">
+        <div class="summary-item summary-estimated-cost">
           <span>ESTIMATED COST</span>
 
           <strong>
@@ -527,7 +537,7 @@
           </strong>
         </div>
 
-        <div class="summary-item">
+        <div class="summary-item summary-actual-cost">
           <span>ACTUAL COST</span>
 
           <strong>
@@ -540,7 +550,7 @@
 
       <div class="settlement">
 
-        <div>
+        <div class="settlement-reserved">
           <span>Budget reserved</span>
 
           <strong>
@@ -548,7 +558,7 @@
           </strong>
         </div>
 
-        <div>
+        <div class="settlement-actual">
           <span>Actual usage</span>
 
           <strong>
@@ -556,10 +566,14 @@
           </strong>
         </div>
 
-        <div>
+        <div
+          class="settlement-adjustment"
+          [class.refund]="result.settlement.adjustmentMicrodollars < 0"
+          [class.settlement-adjustment-positive]="result.settlement.adjustmentMicrodollars > 0"
+        >
           <span>Adjustment</span>
 
-          <strong [class.refund]="result.settlement.adjustmentMicrodollars < 0">
+          <strong>
             ${{ result.settlement.adjustmentMicrodollars / 1000000 | number: '1.2-6' }}
           </strong>
         </div>
@@ -569,13 +583,23 @@
 
       <div class="response-content">
 
-        <span class="response-label">
-          MODEL RESPONSE
-        </span>
+        <div class="response-header">
 
-        <p>
-          {{ result.response.completion }}
-        </p>
+          <span class="response-label">
+            MODEL RESPONSE
+          </span>
+
+          <span class="response-model">
+            {{ result.response.modelUsed }}
+          </span>
+
+        </div>
+
+        <div class="response-body">
+          <p>
+            {{ result.response.completion }}
+          </p>
+        </div>
 
       </div>
 

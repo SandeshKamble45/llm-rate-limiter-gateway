@@ -244,7 +244,6 @@ h1 {
   background: var(--danger);
 }
 
-
 /* ============================================================
    TOOLBAR
    ============================================================ */
@@ -267,15 +266,26 @@ h1 {
   box-shadow: var(--shadow-sm);
 }
 
-.tenant-context {
+.toolbar-contexts {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 22px;
+
+  min-width: 0;
+}
+
+.tenant-context,
+.model-context {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 
   min-width: 0;
 }
 
 .label {
+  flex: 0 0 auto;
+
   color: var(--text-muted);
 
   font-size: 10px;
@@ -318,24 +328,17 @@ h1 {
   opacity: 0.65;
 }
 
-.model-context {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
 .model-select {
   height: 32px;
-  min-width: 170px;
-  padding: 0 9px;
+  min-width: 190px;
+  padding: 0 30px 0 10px;
 
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
 
   outline: none;
 
-  background: var(--surface-subtle);
+  background-color: var(--surface-subtle);
   color: var(--text);
 
   font-family: var(--font-sans);
@@ -346,7 +349,13 @@ h1 {
 
   transition:
     border-color 120ms ease,
-    box-shadow 120ms ease;
+    box-shadow 120ms ease,
+    background-color 120ms ease;
+}
+
+.model-select:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background-color: var(--surface);
 }
 
 .model-select:focus {
@@ -381,6 +390,8 @@ h1 {
   align-items: center;
   gap: 6px;
 
+  flex: 0 0 auto;
+
   padding: 6px 8px;
 
   border: 0;
@@ -405,7 +416,6 @@ h1 {
   font-size: 15px;
   line-height: 1;
 }
-
 
 /* ============================================================
    METRIC CARDS
@@ -1070,7 +1080,6 @@ h1 {
   font-size: 12px;
 }
 
-
 /* ============================================================
    REQUEST ACTIVITY
    ============================================================ */
@@ -1107,6 +1116,8 @@ h1 {
 }
 
 .summary-item {
+  position: relative;
+
   min-width: 0;
 
   padding: 14px;
@@ -1141,8 +1152,56 @@ h1 {
 
   font-family: var(--font-mono);
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 600;
 }
+
+/* Semantic metric accents.
+   The accent stays deliberately narrow so the dashboard
+   remains restrained rather than becoming color-heavy. */
+
+.summary-model {
+  border-top: 2px solid var(--brand);
+}
+
+.summary-model strong {
+  color: var(--brand);
+}
+
+.summary-tokens {
+  border-top: 2px solid var(--indigo);
+}
+
+.summary-tokens strong {
+  color: var(--indigo);
+}
+
+.summary-input strong,
+.summary-output strong {
+  color: var(--text);
+}
+
+.summary-latency strong {
+  color: var(--text-secondary);
+}
+
+.summary-estimated-cost {
+  border-top: 2px solid var(--warning);
+}
+
+.summary-estimated-cost strong {
+  color: var(--warning);
+}
+
+.summary-actual-cost {
+  border-top: 2px solid var(--teal);
+}
+
+.summary-actual-cost strong {
+  color: var(--teal);
+}
+
+
+/* Settlement */
 
 .settlement {
   display: grid;
@@ -1159,7 +1218,9 @@ h1 {
   background: var(--border);
 }
 
-.settlement>div {
+.settlement > div {
+  position: relative;
+
   padding: 13px 15px;
 
   background: var(--surface-subtle);
@@ -1180,12 +1241,43 @@ h1 {
 
   font-family: var(--font-mono);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
 }
 
-.settlement .refund {
+.settlement-reserved {
+  border-top: 2px solid var(--brand);
+}
+
+.settlement-reserved strong {
+  color: var(--brand);
+}
+
+.settlement-actual {
+  border-top: 2px solid var(--teal);
+}
+
+.settlement-actual strong {
+  color: var(--teal);
+}
+
+.settlement-adjustment {
+  border-top: 2px solid var(--warning);
+}
+
+.settlement-adjustment strong {
+  color: var(--warning);
+}
+
+.settlement-adjustment.refund {
+  border-top-color: var(--success);
+}
+
+.settlement-adjustment.refund strong {
   color: var(--success);
 }
+
+
+/* Model response */
 
 .response-content {
   margin-top: 16px;
@@ -1194,7 +1286,18 @@ h1 {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
 
-  background: var(--surface-subtle);
+  background: #f8fafc;
+}
+
+.response-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+
+  padding-bottom: 10px;
+
+  border-bottom: 1px solid var(--border);
 }
 
 .response-label {
@@ -1205,15 +1308,46 @@ h1 {
   letter-spacing: 1px;
 }
 
-.response-content p {
-  margin: 10px 0 0;
+.response-model {
+  max-width: 50%;
 
-  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 
-  font-size: 13px;
-  line-height: 1.6;
+  padding: 4px 7px;
+
+  border: 1px solid var(--brand-border);
+  border-radius: var(--radius-sm);
+
+  background: var(--brand-subtle);
+  color: var(--brand);
+
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.response-body {
+  max-height: 430px;
+  overflow-y: auto;
+
+  margin-top: 12px;
+  padding-right: 8px;
+
+  scrollbar-width: thin;
+}
+
+.response-body p {
+  margin: 0;
+
+  color: var(--text);
+
+  font-size: 14px;
+  line-height: 1.65;
 
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 
@@ -1465,19 +1599,38 @@ h1 {
     font-size: 26px;
   }
 
-  .toolbar {
-    align-items: flex-start;
-  }
+.toolbar {
+  align-items: stretch;
+  flex-direction: column;
+  gap: 12px;
+}
 
-  .tenant-context {
-    min-width: 0;
-    flex: 1;
-  }
+.toolbar-contexts {
+  width: 100%;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
 
-  .tenant-input {
-    width: 100%;
-    min-width: 0;
-  }
+.tenant-context,
+.model-context {
+  width: 100%;
+}
+
+.tenant-input {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+}
+
+.model-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.refresh-button {
+  align-self: flex-end;
+}
 
   .request-summary {
     grid-template-columns: repeat(2, 1fr);
@@ -1556,4 +1709,26 @@ h1 {
   .demo-access-actions button {
     width: 100%;
   }
+
+  .response-content {
+  padding: 14px;
+}
+
+.response-body {
+  max-height: 340px;
+  padding-right: 6px;
+}
+
+.response-body p {
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.response-header {
+  align-items: flex-start;
+}
+
+.response-model {
+  max-width: 45%;
+}
 }
