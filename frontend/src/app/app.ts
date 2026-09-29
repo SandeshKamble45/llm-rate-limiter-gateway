@@ -25,10 +25,12 @@ export class App {
 
   private readonly gatewayApi = inject(GatewayApi);
 
+  private readonly tenantStorageKey = 'llm-gateway-demo-tenant';
+
   readonly status = signal<GatewayStatus | null>(null);
   readonly error = signal<string | null>(null);
 
-  readonly tenantId = signal('demo-tenant');
+  readonly tenantId = signal(this.getOrCreateTenantId());
   readonly prompt = signal('');
   readonly isSending = signal(false);
 
@@ -50,30 +52,49 @@ export class App {
     this.checkBackendHealth();
   }
 
-  private checkBackendHealth(): void {
-  this.backendChecking.set(true);
-  this.backendCheckMessage.set('Connecting to gateway...');
+  private getOrCreateTenantId(): string {
+    const existingTenant = sessionStorage.getItem(
+      this.tenantStorageKey
+    );
 
-  this.gatewayApi.health().subscribe({
-    next: () => {
-      this.backendReady.set(true);
-      this.backendChecking.set(false);
-      this.backendCheckMessage.set('Gateway ready');
-      this.loadStatus();
-    },
-    error: () => {
-      this.backendReady.set(false);
-      this.backendChecking.set(true);
-      this.backendCheckMessage.set(
-        'The free-tier backend is waking up. Checking again automatically...'
-      );
-
-      setTimeout(() => {
-        this.checkBackendHealth();
-      }, 3000);
+    if (existingTenant?.trim()) {
+      return existingTenant;
     }
-  });
-}
+
+    const tenantId = `tenant-${crypto.randomUUID().replace(/-/g, '').slice(0, 8)}`;
+
+    sessionStorage.setItem(
+      this.tenantStorageKey,
+      tenantId
+    );
+
+    return tenantId;
+  }
+
+  private checkBackendHealth(): void {
+    this.backendChecking.set(true);
+    this.backendCheckMessage.set('Connecting to gateway...');
+
+    this.gatewayApi.health().subscribe({
+      next: () => {
+        this.backendReady.set(true);
+        this.backendChecking.set(false);
+        this.backendCheckMessage.set('Gateway ready');
+        this.loadStatus();
+      },
+      error: () => {
+        this.backendReady.set(false);
+        this.backendChecking.set(true);
+        this.backendCheckMessage.set(
+          'The free-tier backend is waking up. Checking again automatically...'
+        );
+
+        setTimeout(() => {
+          this.checkBackendHealth();
+        }, 3000);
+      }
+    });
+  }
 
   loadStatus(): void {
     const tenant = this.tenantId().trim();
@@ -139,9 +160,9 @@ export class App {
       model: this.selectedModel()
     },
     this.liveModelEnabled()
-    ? this.liveAccessCode()
-    : undefined
-   ).subscribe({
+      ? this.liveAccessCode()
+      : undefined
+    ).subscribe({
       next: (response) => {
         console.log('CHAT RESPONSE:', response);
 
@@ -258,7 +279,7 @@ export class App {
         status: 403,
         title: 'LIVE MODEL ACCESS DENIED',
         message: 'The demo access code is invalid or missing.'
-       };
+      };
     }
 
     if (status === 400) {
@@ -281,16 +302,16 @@ export class App {
     };
   }
 
-    selectModel(model: string): void {
+  selectModel(model: string): void {
     if (model === 'gpt-5-mini') {
       this.showLiveAccessModal.set(true);
       return;
     }
 
-      this.selectedModel.set(model);
-      this.liveModelEnabled.set(false);
-      this.liveAccessCode.set('');
-    }
+    this.selectedModel.set(model);
+    this.liveModelEnabled.set(false);
+    this.liveAccessCode.set('');
+  }
 
   enableLiveModel(code: string): void {
     const trimmedCode = code.trim();
@@ -311,6 +332,11 @@ export class App {
 
   onTenantIdChange(value: string): void {
     this.tenantId.set(value);
+
+    sessionStorage.setItem(
+      this.tenantStorageKey,
+      value
+    );
   }
 
   onPromptChange(value: string): void {
