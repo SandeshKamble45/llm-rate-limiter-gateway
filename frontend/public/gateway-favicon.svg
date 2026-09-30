@@ -1,33 +1,67 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 128 128"
+  width="128"
+  height="128"
+  fill="none"
+>
+  <defs>
+    <!-- Emerald green -->
+    <linearGradient
+      id="gatewayGreen"
+      x1="18"
+      y1="20"
+      x2="104"
+      y2="108"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop offset="0" stop-color="#087F5B"/>
+      <stop offset="1" stop-color="#35B86B"/>
+    </linearGradient>
+
+    <!-- Golden yellow -->
+    <linearGradient
+      id="gatewayGold"
+      x1="60"
+      y1="68"
+      x2="110"
+      y2="68"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop offset="0" stop-color="#F6D365"/>
+      <stop offset="1" stop-color="#E5A92F"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Open three-sided gateway -->
   <path
-    d="M48 20
-       C44 16 38 14 32 14
-       C21 14 13 22 13 32
-       C13 42 21 50 32 50
-       C39 50 45 47 49 42
-       V32
-       H34"
-    fill="none"
-    stroke="#17212B"
-    stroke-width="7"
-    stroke-linecap="round"
-    stroke-linejoin="round"
+    d="
+      M104 42
+      V20
+      H20
+      V108
+      H104
+    "
+    stroke="url(#gatewayGreen)"
+    stroke-width="12"
+    stroke-linecap="square"
+    stroke-linejoin="bevel"
   />
 
+  <!-- Longer forward arrow -->
   <path
-    d="M34 32H51"
-    fill="none"
-    stroke="#2457D6"
-    stroke-width="7"
-    stroke-linecap="round"
+    d="M58 68H96"
+    stroke="url(#gatewayGold)"
+    stroke-width="12"
+    stroke-linecap="square"
   />
 
+  <!-- Arrow head -->
   <path
-    d="M45 26L51 32L45 38"
-    fill="none"
-    stroke="#2457D6"
-    stroke-width="5"
-    stroke-linecap="round"
-    stroke-linejoin="round"
+    d="M88 57L100 68L88 79"
+    stroke="url(#gatewayGold)"
+    stroke-width="12"
+    stroke-linecap="square"
+    stroke-linejoin="miter"
   />
 </svg>
