@@ -70,7 +70,7 @@ This allows the gateway to control both traffic and LLM resource consumption.
 
 ## Architecture
 
-![LLM Gateway System Architecture](docs/architecture.svg)
+![LLM Gateway Deployment and Component Architecture](docs/architecture.svg)
 
 ## Request Lifecycle
 
