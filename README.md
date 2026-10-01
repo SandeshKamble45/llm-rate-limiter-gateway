@@ -70,53 +70,7 @@ This allows the gateway to control both traffic and LLM resource consumption.
 
 ## Architecture
 
-```text
-                         ┌─────────────────────┐
-                         │   Angular Dashboard │
-                         │       Vercel        │
-                         └──────────┬──────────┘
-                                    │
-                                    │ HTTP
-                                    ▼
-                     ┌──────────────────────────┐
-                     │      LLM Gateway         │
-                     │      Spring Boot         │
-                     │        Render            │
-                     └────────────┬─────────────┘
-                                  │
-                  ┌───────────────┼────────────────┐
-                  │               │                │
-                  ▼               ▼                ▼
-          ┌─────────────┐ ┌──────────────┐ ┌───────────────┐
-          │   Sliding   │ │ Token Bucket │ │ Tenant Budget │
-          │    Window   │ │    Redis     │ │  Reservation  │
-          │    Redis    │ │              │ │     Redis     │
-          └─────────────┘ └──────────────┘ └───────────────┘
-                  │               │                │
-                  └───────────────┼────────────────┘
-                                  ▼
-                       ┌─────────────────────┐
-                       │ Provider Selection  │
-                       │ + Retry             │
-                       │ + Circuit Breaker   │
-                       └──────────┬──────────┘
-                                  │
-                     ┌────────────┴────────────┐
-                     ▼                         ▼
-             ┌───────────────┐         ┌───────────────┐
-             │ Mock Provider │         │ OpenAI        │
-             │ primary-model │         │ gpt-5-mini    │
-             └───────────────┘         └───────────────┘
-                     │                         │
-                     └────────────┬────────────┘
-                                  ▼
-                         Actual token usage
-                                  │
-                                  ▼
-                         Budget settlement
-```
-
----
+![LLM Gateway System Architecture](docs/architecture.svg)
 
 ## Request Lifecycle
 
