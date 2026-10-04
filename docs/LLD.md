@@ -1,4 +1,4 @@
-# LLM Rate Limiter Gateway — Low-Level Design
+# LLM Gateway — Low-Level Design
 
 ## 1. Purpose
 
