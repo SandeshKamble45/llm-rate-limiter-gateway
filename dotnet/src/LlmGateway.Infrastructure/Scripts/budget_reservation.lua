@@ -8,9 +8,9 @@ local current = tonumber(redis.call("GET", KEYS[1]) or "0")
 
 -- A repeated reservation ID never increments spend a second time.
 if existing_status == "reserved" then
-    return { 1, current, tonumber(redis.call("HGET", KEYS[2], "reserved")) }
+    return { 2, current, tonumber(redis.call("HGET", KEYS[2], "reserved")) }
 elseif existing_status == "settled" then
-    return { 0, current, tonumber(redis.call("HGET", KEYS[2], "reserved")) }
+    return { 3, current, tonumber(redis.call("HGET", KEYS[2], "reserved")) }
 end
 
 if requested <= 0 then
