@@ -37,16 +37,18 @@ stages:
       workingDirectory: dotnet
       displayName: Build
 
-    - script: dotnet test LlmGateway.sln --configuration $(buildConfiguration) --no-build --logger "trx;LogFileName=dotnet-tests.trx"
+    - script: dotnet test LlmGateway.sln --configuration $(buildConfiguration) --no-build --max-parallel-test-modules 2 --report-trx --results-directory "$(Agent.TempDirectory)/dotnet-tests"
       workingDirectory: dotnet
       displayName: Unit and Redis integration tests
 
     - task: PublishTestResults@2
-      condition: always()
+      condition: succeededOrFailed()
       inputs:
         testResultsFormat: VSTest
-        testResultsFiles: dotnet/**/TestResults/**/*.trx
+        testResultsFiles: '*.trx'
+        searchFolder: $(Agent.TempDirectory)/dotnet-tests
         failTaskOnFailedTests: true
+        failTaskOnMissingResultsFile: true
 
 - stage: Deploy
   displayName: Build, push and deploy to Azure Container Apps
@@ -73,7 +75,4 @@ stages:
           az acr login --name "$(acrName)"
           docker build --tag "$(acrLoginServer)/$(imageRepository):$(imageTag)" dotnet
           docker push "$(acrLoginServer)/$(imageRepository):$(imageTag)"
-          az containerapp update \
-            --name "$(containerAppName)" \
-            --resource-group "$(resourceGroup)" \
-            --image "$(acrLoginServer)/$(imageRepository):$(imageTag)"
+          az containerapp update             --name "$(containerAppName)"             --resource-group "$(resourceGroup)"             --image "$(acrLoginServer)/$(imageRepository):$(imageTag)"
