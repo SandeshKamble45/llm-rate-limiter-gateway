@@ -3,7 +3,7 @@
     <ProjectReference Include="..\LlmGateway.Domain\LlmGateway.Domain.csproj" />
     <ProjectReference Include="..\LlmGateway.Application\LlmGateway.Application.csproj" />
     <PackageReference Include="StackExchange.Redis" Version="2.8.31" />
-    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.0.0" />
+    <PackageReference Include="Polly.Core" Version="8.9.1" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.0" />
   </ItemGroup>
   <ItemGroup>
