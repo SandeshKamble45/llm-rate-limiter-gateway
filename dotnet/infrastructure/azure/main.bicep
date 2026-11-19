@@ -154,7 +154,7 @@ resource gatewayApp 'Microsoft.App/containerApps@2024-03-01' = {
           name: 'gateway'
           image: '${acr.properties.loginServer}/${imageRepository}:${imageTag}'
           resources: {
-            cpu: 0.5
+            cpu: json('0.5')
             memory: '1Gi'
           }
           env: containerEnvironment
