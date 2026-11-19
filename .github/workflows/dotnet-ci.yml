@@ -38,8 +38,8 @@ jobs:
       - name: Build
         run: dotnet build LlmGateway.sln --configuration Release --no-restore
 
-      - name: Test
-        run: dotnet test LlmGateway.sln --configuration Release --no-build --logger "trx;LogFileName=dotnet-tests.trx"
+      - name: Test (Microsoft Testing Platform)
+        run: dotnet test LlmGateway.sln --configuration Release --no-build --max-parallel-test-modules 2 --report-trx --results-directory TestResults
 
       - name: Build container image
         run: docker build --tag llm-gateway-dotnet:ci .
@@ -55,5 +55,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: dotnet-test-results
-          path: dotnet/**/TestResults/**/*.trx
-          if-no-files-found: ignore
+          path: dotnet/TestResults/**/*.trx
+          if-no-files-found: warn
