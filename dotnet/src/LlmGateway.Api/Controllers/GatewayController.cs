@@ -21,6 +21,7 @@ public sealed class GatewayController(
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status402PaymentRequired)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     [ProducesResponseType(typeof(RateLimitResult), StatusCodes.Status429TooManyRequests)]
     [ProducesResponseType(typeof(GatewayErrorResponse), StatusCodes.Status502BadGateway)]
     public async Task<IActionResult> Chat(
