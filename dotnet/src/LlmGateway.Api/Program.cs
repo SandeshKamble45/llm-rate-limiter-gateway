@@ -2,6 +2,10 @@ using LlmGateway.Application.Abstractions;
 using LlmGateway.Application.Configuration;
 using LlmGateway.Application.Services;
 using LlmGateway.Infrastructure;
+using LlmGateway.Api;
+using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using System.Text.Json;
 using Microsoft.Extensions.Options;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -61,9 +65,19 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapControllers();
-app.MapHealthChecks("/actuator/health");
-app.MapHealthChecks("/healthz");
+var healthOptions = new HealthCheckOptions
+{
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
+        await JsonSerializer.SerializeAsync(context.Response.Body,
+            new { status = report.Status.ToString() },
+            cancellationToken: context.RequestAborted);
+    }
+};
+app.MapHealthChecks("/actuator/health", healthOptions);
+app.MapHealthChecks("/healthz", healthOptions);
 
 app.Run();
 
-public partial class Program;
+public partial class Program { }
