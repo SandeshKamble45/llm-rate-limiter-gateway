@@ -11,6 +11,8 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using StackExchange.Redis;
+using Azure.Identity;
+using Microsoft.Azure.StackExchangeRedis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,12 +27,32 @@ builder.Services.AddOptions<ProviderOptions>()
     .BindConfiguration(ProviderOptions.SectionName)
     .ValidateOnStart();
 
-var redisConnectionString = builder.Configuration.GetConnectionString("Redis")
-    ?? builder.Configuration["Redis:ConnectionString"]
-    ?? "localhost:6379,abortConnect=false";
-
-builder.Services.AddSingleton<IConnectionMultiplexer>(
-    _ => ConnectionMultiplexer.Connect(redisConnectionString));
+IConnectionMultiplexer redisConnection;
+var managedRedisEndpoint = builder.Configuration["Redis:Endpoint"];
+if (!string.IsNullOrWhiteSpace(managedRedisEndpoint))
+{
+    // Azure Managed Redis: Microsoft Entra token auth with RESP3 and proactive token refresh.
+    var redisOptions = new ConfigurationOptions
+    {
+        Ssl = true,
+        AbortOnConnectFail = false,
+        BacklogPolicy = BacklogPolicy.Default,
+        Protocol = RedisProtocol.Resp3
+    };
+    var redisPort = builder.Configuration.GetValue<int?>("Redis:Port") ?? 10000;
+    redisOptions.EndPoints.Add(managedRedisEndpoint, redisPort);
+    await redisOptions.ConfigureForAzureWithTokenCredentialAsync(new DefaultAzureCredential());
+    redisConnection = await ConnectionMultiplexer.ConnectAsync(redisOptions);
+}
+else
+{
+    // Local Redis or a non-Entra development cache.
+    var redisConnectionString = builder.Configuration.GetConnectionString("Redis")
+        ?? builder.Configuration["Redis:ConnectionString"]
+        ?? "localhost:6379,abortConnect=false";
+    redisConnection = await ConnectionMultiplexer.ConnectAsync(redisConnectionString);
+}
+builder.Services.AddSingleton(redisConnection);
 
 builder.Services.AddSingleton<IGatewayStateStore, RedisGatewayStateStore>();
 builder.Services.AddSingleton<ITokenCounter, ApproximateTokenCounter>();
