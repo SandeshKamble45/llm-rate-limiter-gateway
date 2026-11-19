@@ -1,0 +1,18 @@
+# Local environment and deployment secrets
+.env
+.env.*
+!.env.example
+infrastructure/azure/*.dev.json
+infrastructure/azure/*.secrets.json
+
+# .NET build output
+**/bin/
+**/obj/
+**/TestResults/
+**/artifacts/
+
+# IDE and local tooling
+.vs/
+.vscode/
+*.user
+*.suo
