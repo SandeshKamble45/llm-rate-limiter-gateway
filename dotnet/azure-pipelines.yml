@@ -1,0 +1,79 @@
+trigger:
+  branches:
+    include:
+      - main
+      - migration/dotnet10-azure
+
+pr:
+  branches:
+    include:
+      - main
+      - migration/dotnet10-azure
+
+variables:
+  buildConfiguration: Release
+  imageRepository: llm-gateway
+  imageTag: $(Build.SourceVersion)
+
+stages:
+- stage: Validate
+  displayName: Restore, build and test
+  jobs:
+  - job: BuildAndTest
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+    - task: UseDotNet@2
+      displayName: Install .NET 10 SDK
+      inputs:
+        packageType: sdk
+        version: 10.0.x
+
+    - script: dotnet restore LlmGateway.sln
+      workingDirectory: dotnet
+      displayName: Restore
+
+    - script: dotnet build LlmGateway.sln --configuration $(buildConfiguration) --no-restore
+      workingDirectory: dotnet
+      displayName: Build
+
+    - script: dotnet test LlmGateway.sln --configuration $(buildConfiguration) --no-build --logger "trx;LogFileName=dotnet-tests.trx"
+      workingDirectory: dotnet
+      displayName: Unit and Redis integration tests
+
+    - task: PublishTestResults@2
+      condition: always()
+      inputs:
+        testResultsFormat: VSTest
+        testResultsFiles: dotnet/**/TestResults/**/*.trx
+        failTaskOnFailedTests: true
+
+- stage: Deploy
+  displayName: Build, push and deploy to Azure Container Apps
+  dependsOn: Validate
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+  jobs:
+  - job: DeployContainerApp
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+    - task: UseDotNet@2
+      inputs:
+        packageType: sdk
+        version: 10.0.x
+
+    - task: AzureCLI@2
+      displayName: Build and push image, then update Container App
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+          set -euo pipefail
+          az acr login --name "$(acrName)"
+          docker build --tag "$(acrLoginServer)/$(imageRepository):$(imageTag)" dotnet
+          docker push "$(acrLoginServer)/$(imageRepository):$(imageTag)"
+          az containerapp update \
+            --name "$(containerAppName)" \
+            --resource-group "$(resourceGroup)" \
+            --image "$(acrLoginServer)/$(imageRepository):$(imageTag)"
