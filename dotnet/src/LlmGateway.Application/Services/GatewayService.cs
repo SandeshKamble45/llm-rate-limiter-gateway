@@ -22,15 +22,14 @@ public sealed class GatewayService
         ILlmProvider provider,
         ITokenCounter tokenCounter,
         IModelPricingService pricing,
-        IOptions<GatewayOptions> options,
-        IOptions<ProviderOptions> providerOptions)
+        IOptions<GatewayOptions> options)
     {
         _state = state;
         _provider = provider;
         _tokenCounter = tokenCounter;
         _pricing = pricing;
         _options = options.Value;
-        _demoAccessCode = providerOptions.Value.DemoAccessCode;
+        _demoAccessCode = _options.DemoAccessCode;
     }
 
     public async Task<GatewayResponse> ProcessAsync(
@@ -95,7 +94,7 @@ public sealed class GatewayService
             // rather than falsely refunding a potentially billable operation. Reconciliation is required.
             throw;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             var settlement = await _state.SettleBudgetAsync(
                 tenantId, reservationId, 0, CancellationToken.None);
