@@ -1,8 +1,8 @@
 using LlmGateway.Application.Services;
+using LlmGateway.Application.Abstractions;
 using LlmGateway.Domain;
 using LlmGateway.Infrastructure;
 using Microsoft.AspNetCore.Mvc;
-using StackExchange.Redis;
 
 namespace LlmGateway.Api.Controllers;
 
@@ -11,16 +11,15 @@ namespace LlmGateway.Api.Controllers;
 public sealed class GatewayController(
     GatewayService gateway,
     IGatewayStateStore stateStore,
-    ProviderResiliencePipeline providerResilience,
-    IConfiguration configuration) : ControllerBase
+    ProviderResiliencePipeline providerResilience) : ControllerBase
 {
     [HttpPost("chat")]
-    [ProducesResponseType<GatewayResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(GatewayResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status402PaymentRequired)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType<RateLimitResult>(StatusCodes.Status429TooManyRequests)]
-    [ProducesResponseType<GatewayErrorResponse>(StatusCodes.Status502BadGateway)]
+    [ProducesResponseType(typeof(RateLimitResult), StatusCodes.Status429TooManyRequests)]
+    [ProducesResponseType(typeof(GatewayErrorResponse), StatusCodes.Status502BadGateway)]
     public async Task<IActionResult> Chat(
         [FromBody] ChatRequest? request,
         [FromHeader(Name = "X-Demo-Access-Code")] string? demoAccessCode,
@@ -50,7 +49,7 @@ public sealed class GatewayController(
     }
 
     [HttpGet("status")]
-    [ProducesResponseType<GatewayStatusResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(GatewayStatusResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> Status([FromQuery] string? tenantId, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(tenantId))
