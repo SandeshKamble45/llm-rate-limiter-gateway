@@ -9,7 +9,7 @@ public sealed class Cl100kTokenCounterTests
     public void MatchesKnownCl100kBaseTokenVector()
     {
         var counter = new Cl100kTokenCounter();
-        Assert.Equal(3, counter.CountTokens("Hello, world!"));
+        Assert.Equal(4, counter.CountTokens("Hello, world!"));
     }
 
     [Fact]
