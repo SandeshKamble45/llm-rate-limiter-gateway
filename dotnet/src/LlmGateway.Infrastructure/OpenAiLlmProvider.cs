@@ -42,6 +42,8 @@ public sealed class OpenAiLlmProvider : ILlmProvider
         });
 
         using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+            throw new ProviderRateLimitedException("LLM provider rejected the request with HTTP 429.");
         response.EnsureSuccessStatusCode();
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
