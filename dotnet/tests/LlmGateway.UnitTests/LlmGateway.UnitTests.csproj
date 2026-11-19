@@ -13,5 +13,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\LlmGateway.Domain\LlmGateway.Domain.csproj" />
+    <ProjectReference Include="..\..\src\LlmGateway.Infrastructure\LlmGateway.Infrastructure.csproj" />
   </ItemGroup>
 </Project>
