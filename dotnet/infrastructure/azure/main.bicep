@@ -1,21 +1,13 @@
 targetScope = 'resourceGroup'
 
-@description('Azure region for the resource group.')
 param location string = resourceGroup().location
-
-@description('Short, globally unique application name. Use lowercase letters and digits.')
 param appName string = 'llm-gateway'
-
-@description('Globally unique ACR name. The default is derived from the resource group ID.')
-param registryName string = 'llmgateway${uniqueString(resourceGroup().id)}'
-
-@description('Container image repository name.')
+param registryName string
+param identityName string = '${appName}-identity'
+param logAnalyticsName string = '${appName}-logs'
+param appInsightsName string = '${appName}-appi'
 param imageRepository string = 'llm-gateway'
-
-@description('Immutable image tag, preferably the Git commit SHA.')
-param imageTag string = 'latest'
-
-@description('Existing Azure Managed Redis hostname, without scheme or port.')
+param imageTag string
 param managedRedisEndpoint string
 
 @allowed([
@@ -37,78 +29,24 @@ param minReplicas int = 0
 @maxValue(10)
 param maxReplicas int = 3
 
-@minValue(30)
-@maxValue(90)
-param logRetentionInDays int = 30
-
-var acrPullRoleDefinitionId = '7f951dda-4ed3-4680-a7ca-43fe172d538d'
-var appInsightsName = '${appName}-appi'
-var logAnalyticsName = '${appName}-logs'
-var environmentName = '${appName}-env'
-var identityName = '${appName}-identity'
-
-resource gatewayIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+resource gatewayIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: identityName
-  location: location
 }
 
-resource acr 'Microsoft.ContainerRegistry/registries@2025-04-01' = {
+resource acr 'Microsoft.ContainerRegistry/registries@2025-04-01' existing = {
   name: registryName
-  location: location
-  sku: {
-    name: 'Standard'
-  }
-  properties: {
-    adminUserEnabled: false
-    publicNetworkAccess: 'Enabled'
-    policies: {
-      azureADAuthenticationAsArmPolicy: {
-        status: 'enabled'
-      }
-    }
-  }
 }
 
-resource acrPullAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(acr.id, gatewayIdentity.properties.principalId, acrPullRoleDefinitionId)
-  scope: acr
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', acrPullRoleDefinitionId)
-    principalId: gatewayIdentity.properties.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-resource logWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
+resource logWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10-01' existing = {
   name: logAnalyticsName
-  location: location
-  properties: {
-    sku: {
-      name: 'PerGB2018'
-    }
-    retentionInDays: logRetentionInDays
-    features: {
-      searchVersion: 1
-    }
-    publicNetworkAccessForIngestion: 'Enabled'
-    publicNetworkAccessForQuery: 'Enabled'
-  }
 }
 
-resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
+resource appInsights 'Microsoft.Insights/components@2020-02-02' existing = {
   name: appInsightsName
-  location: location
-  kind: 'web'
-  properties: {
-    Application_Type: 'web'
-    Flow_Type: 'Bluefield'
-    Request_Source: 'rest'
-    WorkspaceResourceId: logWorkspace.id
-  }
 }
 
 resource containerAppsEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = {
-  name: environmentName
+  name: '${appName}-env'
   location: location
   properties: {
     appLogsConfiguration: {
@@ -262,9 +200,6 @@ resource gatewayApp 'Microsoft.App/containerApps@2024-03-01' = {
       }
     }
   }
-  dependsOn: [
-    acrPullAssignment
-  ]
 }
 
 output containerAppUrl string = 'https://${gatewayApp.properties.configuration.ingress.fqdn}'
