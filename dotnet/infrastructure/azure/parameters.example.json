@@ -1,0 +1,15 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": { "value": "centralindia" },
+    "appName": { "value": "llm-gateway-demo" },
+    "registryName": { "value": "replace-with-globally-unique-acr-name" },
+    "imageRepository": { "value": "llm-gateway" },
+    "imageTag": { "value": "replace-with-git-commit-sha" },
+    "managedRedisEndpoint": { "value": "replace-with-managed-redis-hostname" },
+    "gatewayProvider": { "value": "mock" },
+    "minReplicas": { "value": 0 },
+    "maxReplicas": { "value": 3 }
+  }
+}
