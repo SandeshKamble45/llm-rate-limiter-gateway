@@ -67,7 +67,7 @@ Arguments:
 - daily budget
 - TTL seconds
 
-The keys include the same Redis Cluster hash tag (tenant + UTC date). The script checks reservation status first, rejects an already settled reservation, and does not increment daily spend twice for a previously reserved ID.
+The keys include the same Redis Cluster hash tag (tenant + UTC date). The script checks reservation status first. It returns a distinct in-progress result for a duplicate active ID and a distinct already-settled result for a completed ID. Neither path increments daily spend again; the application returns HTTP 409 rather than calling the provider a second time.
 
 ### Budget settlement
 
