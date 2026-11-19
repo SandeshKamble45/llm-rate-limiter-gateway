@@ -10,7 +10,7 @@ public sealed record TokenBucketStatus(double AvailableTokens, long Capacity, do
 
 public sealed record SlidingWindowStatus(long CurrentRequests, long MaxRequests, long WindowSeconds, long RemainingRequests);
 
-public sealed record BudgetReservationResult(bool Allowed, long SpentMicrodollars, long RemainingMicrodollars);
+public sealed record BudgetReservationResult(bool Allowed, long SpentMicrodollars, long RemainingMicrodollars, bool InProgress = false, bool AlreadySettled = false);
 
 public sealed record BudgetSettlementResult(
     long ReservedMicrodollars,
