@@ -1,5 +1,7 @@
 using LlmGateway.Application.Services;
 using LlmGateway.Application.Abstractions;
+using LlmGateway.Application.Configuration;
+using Microsoft.Extensions.Options;
 using LlmGateway.Domain;
 using LlmGateway.Infrastructure;
 using Microsoft.AspNetCore.Mvc;
@@ -11,7 +13,8 @@ namespace LlmGateway.Api.Controllers;
 public sealed class GatewayController(
     GatewayService gateway,
     IGatewayStateStore stateStore,
-    ProviderResiliencePipeline providerResilience) : ControllerBase
+    ProviderResiliencePipeline providerResilience,
+    IOptions<AuthenticationOptions> authenticationOptions) : ControllerBase
 {
     [HttpPost("chat")]
     [ProducesResponseType(typeof(GatewayResponse), StatusCodes.Status200OK)]
@@ -28,6 +31,8 @@ public sealed class GatewayController(
     {
         if (request is null)
             return BadRequest("Request body is required");
+        if (!IsTenantAuthorized(request.TenantId))
+            return Forbid();
 
         if (!string.IsNullOrWhiteSpace(idempotencyKey) && idempotencyKey.Length > 128)
             return BadRequest("Idempotency-Key cannot exceed 128 characters.");
@@ -54,6 +59,8 @@ public sealed class GatewayController(
     {
         if (string.IsNullOrWhiteSpace(tenantId))
             return BadRequest("tenantId is required");
+        if (!IsTenantAuthorized(tenantId))
+            return Forbid();
 
         try
         {
@@ -75,6 +82,8 @@ public sealed class GatewayController(
     {
         if (string.IsNullOrWhiteSpace(tenantId))
             return BadRequest("tenantId is required");
+        if (!IsTenantAuthorized(tenantId))
+            return Forbid();
         try
         {
             var normalized = TenantId.Normalize(tenantId);
@@ -85,6 +94,32 @@ public sealed class GatewayController(
         catch (ArgumentException exception) { return BadRequest(exception.Message); }
     }
 
+    private bool IsTenantAuthorized(string? tenantId)
+    {
+        var settings = authenticationOptions.Value;
+        if (!settings.Enabled)
+            return true;
+
+        if (string.IsNullOrWhiteSpace(tenantId))
+            return false;
+
+        var claim = User.FindFirst(settings.TenantClaimType)?.Value;
+        if (string.IsNullOrWhiteSpace(claim))
+            return false;
+
+        try
+        {
+            return string.Equals(
+                TenantId.Normalize(claim),
+                TenantId.Normalize(tenantId),
+                StringComparison.Ordinal);
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
+
     [HttpPost("check/sliding-window")]
     public async Task<IActionResult> CheckSlidingWindow(
         [FromQuery] string? tenantId,
@@ -92,6 +127,8 @@ public sealed class GatewayController(
     {
         if (string.IsNullOrWhiteSpace(tenantId))
             return BadRequest("tenantId is required");
+        if (!IsTenantAuthorized(tenantId))
+            return Forbid();
         try
         {
             var normalized = TenantId.Normalize(tenantId);
