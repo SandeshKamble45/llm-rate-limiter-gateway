@@ -13,12 +13,14 @@ public sealed class OpenAiLlmProvider : ILlmProvider
     private readonly HttpClient _httpClient;
     private readonly ProviderOptions _provider;
     private readonly GatewayOptions _gateway;
+    private readonly ITokenCounter _tokenCounter;
 
-    public OpenAiLlmProvider(HttpClient httpClient, IOptions<ProviderOptions> provider, IOptions<GatewayOptions> gateway)
+    public OpenAiLlmProvider(HttpClient httpClient, IOptions<ProviderOptions> provider, IOptions<GatewayOptions> gateway, ITokenCounter tokenCounter)
     {
         _httpClient = httpClient;
         _provider = provider.Value;
         _gateway = gateway.Value;
+        _tokenCounter = tokenCounter;
         _httpClient.BaseAddress = new Uri(_provider.OpenAiBaseUrl, UriKind.Absolute);
         _httpClient.Timeout = Timeout.InfiniteTimeSpan; // resilience handler owns timeout policy
     }
@@ -59,8 +61,8 @@ public sealed class OpenAiLlmProvider : ILlmProvider
         var outputTokens = ReadTokenCount(usage, "output_tokens");
 
         // The local estimator is a fallback only; exact CL100K tokenizer parity is still pending.
-        if (inputTokens <= 0) inputTokens = Math.Max(1, TokenEstimator.Count(prompt));
-        if (outputTokens <= 0) outputTokens = Math.Max(1, TokenEstimator.Count(completion));
+        if (inputTokens <= 0) inputTokens = Math.Max(1, _tokenCounter.CountTokens(prompt));
+        if (outputTokens <= 0) outputTokens = Math.Max(1, _tokenCounter.CountTokens(completion));
 
         return new LlmResponse(model, completion,
             new UsageMetadata(inputTokens, outputTokens, inputTokens + outputTokens));
