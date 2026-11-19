@@ -103,6 +103,41 @@ public sealed class RedisGatewayStateStoreTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ConcurrentDuplicateReservationIsMarkedInProgressWithoutChargingTwice()
+    {
+        var reservationId = $"{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid():N}";
+        var first = await _store.ReserveBudgetAsync(
+            "duplicate-tenant", reservationId, 40, CancellationToken.None);
+        var duplicate = await _store.ReserveBudgetAsync(
+            "duplicate-tenant", reservationId, 40, CancellationToken.None);
+
+        Assert.True(first.Allowed);
+        Assert.False(duplicate.Allowed);
+        Assert.True(duplicate.InProgress);
+        Assert.False(duplicate.AlreadySettled);
+
+        var status = await _store.GetBudgetStatusAsync("duplicate-tenant", CancellationToken.None);
+        Assert.Equal(40, status.SpentMicrodollars);
+    }
+
+    [Fact]
+    public async Task SettledReservationCannotBeReservedAgain()
+    {
+        var reservationId = $"{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid():N}";
+        await _store.ReserveBudgetAsync("replay-tenant", reservationId, 40, CancellationToken.None);
+        await _store.SettleBudgetAsync("replay-tenant", reservationId, 20, CancellationToken.None);
+
+        var duplicate = await _store.ReserveBudgetAsync(
+            "replay-tenant", reservationId, 40, CancellationToken.None);
+
+        Assert.False(duplicate.Allowed);
+        Assert.True(duplicate.AlreadySettled);
+        Assert.False(duplicate.InProgress);
+        var status = await _store.GetBudgetStatusAsync("replay-tenant", CancellationToken.None);
+        Assert.Equal(20, status.SpentMicrodollars);
+    }
+
+    [Fact]
     public async Task TenantBudgetKeysRemainIsolated()
     {
         var datePrefix = DateTime.UtcNow.ToString("yyyyMMdd");
