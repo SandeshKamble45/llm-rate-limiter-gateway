@@ -105,12 +105,14 @@ public sealed class RedisGatewayStateStore : IGatewayStateStore
             .WaitAsync(cancellationToken);
 
         var values = (RedisResult[])result!;
-        var allowed = (long)values[0] == 1;
+        var state = (long)values[0];
         var spent = (long)values[1];
         return new BudgetReservationResult(
-            allowed,
+            state == 1,
             spent,
-            Math.Max(0, _options.DailyBudgetMicrodollars - spent));
+            Math.Max(0, _options.DailyBudgetMicrodollars - spent),
+            InProgress: state == 2,
+            AlreadySettled: state == 3);
     }
 
     public async Task<BudgetSettlementResult> SettleBudgetAsync(
