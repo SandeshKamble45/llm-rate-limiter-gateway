@@ -44,6 +44,12 @@ jobs:
       - name: Build container image
         run: docker build --tag llm-gateway-dotnet:ci .
 
+      - name: Validate Azure Bicep templates
+        run: |
+          az bicep install
+          az bicep build --file infrastructure/azure/foundation.bicep --outfile /tmp/foundation.json
+          az bicep build --file infrastructure/azure/main.bicep --outfile /tmp/main.json
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
