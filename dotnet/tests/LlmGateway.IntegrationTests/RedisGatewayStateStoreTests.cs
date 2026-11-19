@@ -46,7 +46,7 @@ public sealed class RedisGatewayStateStoreTests : IAsyncLifetime
             .Select(_ => _store.ConsumeSlidingWindowAsync("window-tenant", CancellationToken.None)));
 
         Assert.Equal(3, results.Count(x => x.Allowed));
-        var rejected = Assert.Single(results.Where(x => !x.Allowed));
+        var rejected = Assert.Single(results, x => !x.Allowed);
         Assert.Equal("sliding-window", rejected.Algorithm);
         Assert.InRange(rejected.RetryAfterSeconds, 1, 60);
     }
