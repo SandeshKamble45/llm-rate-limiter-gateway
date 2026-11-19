@@ -2,8 +2,10 @@
   <ItemGroup>
     <ProjectReference Include="..\LlmGateway.Domain\LlmGateway.Domain.csproj" />
     <ProjectReference Include="..\LlmGateway.Application\LlmGateway.Application.csproj" />
-    <PackageReference Include="StackExchange.Redis" Version="2.8.31" />
+    <PackageReference Include="StackExchange.Redis" Version="2.13.17" />
     <PackageReference Include="Polly.Core" Version="8.9.1" />
+    <PackageReference Include="Microsoft.Azure.StackExchangeRedis" Version="3.3.1" />
+    <PackageReference Include="Azure.Identity" Version="1.21.0" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.0" />
   </ItemGroup>
   <ItemGroup>
