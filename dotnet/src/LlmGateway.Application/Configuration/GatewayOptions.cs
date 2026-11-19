@@ -13,4 +13,5 @@ public sealed class GatewayOptions
     public double TokenBucketRefillRatePerSecond { get; init; } = 50;
     public string PrimaryModel { get; init; } = "primary-model";
     public string Provider { get; init; } = "mock";
+    public string? DemoAccessCode { get; init; }
 }
