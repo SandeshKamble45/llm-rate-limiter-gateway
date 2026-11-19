@@ -67,6 +67,7 @@ Numeric cost values in this example are illustrative; actual amounts are calcula
 | 400 | Invalid body, tenant ID, prompt, model or oversized input | String message |
 | 402 | Daily tenant budget could not be reserved | BudgetReservationResult |
 | 403 | Missing/invalid demo access code or tenant claim mismatch | String message |
+| 409 | Reservation identity is already in progress or has already been settled | BudgetReservationResult |
 | 429 | Sliding-window or token-bucket rejection | RateLimitResult |
 | 502 | Provider unavailable | GatewayErrorResponse |
 
@@ -74,7 +75,7 @@ Numeric cost values in this example are illustrative; actual amounts are calcula
 
 Provider error response properties: message, releasedReservationMicrodollars and settlement.
 
-The current Idempotency-Key is used to derive a stable budget reservation identity. It does not yet implement an HTTP response replay cache or complete same-key concurrency semantics. Do not describe it as full end-to-end request idempotency.
+The current Idempotency-Key is used to derive a stable budget reservation identity. A second use while the first reservation is in progress or after it is settled returns HTTP 409, preventing a second provider call. It does not yet implement an HTTP response replay cache. Do not describe it as full end-to-end request idempotency.
 
 ## GET /v1/gateway/status?tenantId=tenant-1
 
