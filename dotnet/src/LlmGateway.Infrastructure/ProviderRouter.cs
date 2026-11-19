@@ -11,20 +11,20 @@ public sealed class ProviderRouter : ILlmProvider
     private readonly MockLlmProvider _mock;
     private readonly OpenAiLlmProvider _openAi;
     private readonly FallbackLlmProvider _fallback;
-    private readonly ProviderCircuitState _circuit;
+    private readonly ProviderResiliencePipeline _resilience;
 
     public ProviderRouter(
         IOptions<GatewayOptions> gateway,
         MockLlmProvider mock,
         OpenAiLlmProvider openAi,
         FallbackLlmProvider fallback,
-        ProviderCircuitState circuit)
+        ProviderResiliencePipeline resilience)
     {
         _gateway = gateway.Value;
         _mock = mock;
         _openAi = openAi;
         _fallback = fallback;
-        _circuit = circuit;
+        _resilience = resilience;
     }
 
     public string PrimaryModel => string.Equals(_gateway.Provider, "openai", StringComparison.OrdinalIgnoreCase)
@@ -40,14 +40,12 @@ public sealed class ProviderRouter : ILlmProvider
         {
             try
             {
-                var result = await _openAi.CompleteAsync(model, prompt, cancellationToken);
-                _circuit.RecordSuccess();
-                return result;
+                return await _resilience.ExecuteAsync(
+                    token => _openAi.CompleteAsync(model, prompt, token), cancellationToken);
             }
             catch (OperationCanceledException) { throw; }
-            catch (Exception)
+            catch (Exception) when (!cancellationToken.IsCancellationRequested)
             {
-                _circuit.RecordFailure();
                 return await _fallback.CompleteAsync(_fallback.PrimaryModel, prompt, cancellationToken);
             }
         }
