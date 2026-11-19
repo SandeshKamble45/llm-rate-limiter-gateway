@@ -6,7 +6,6 @@ using LlmGateway.Api;
 using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using System.Text.Json;
-using Microsoft.Extensions.Options;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
@@ -62,6 +61,7 @@ builder.Services.AddSingleton<FallbackLlmProvider>();
 builder.Services.AddHttpClient<OpenAiLlmProvider>();
 builder.Services.AddSingleton<ProviderResiliencePipeline>();
 builder.Services.AddSingleton<ILlmProvider, ProviderRouter>();
+builder.Services.AddSingleton<GatewayMetrics>();
 builder.Services.AddScoped<GatewayService>();
 
 builder.Services.AddHealthChecks()
@@ -74,6 +74,7 @@ builder.Services.AddOpenTelemetry()
         .AddHttpClientInstrumentation()
         .AddOtlpExporter())
     .WithMetrics(metrics => metrics
+        .AddMeter(GatewayMetrics.MeterName)
         .AddAspNetCoreInstrumentation()
         .AddHttpClientInstrumentation()
         .AddRuntimeInstrumentation()
