@@ -1,3 +1,4 @@
+using Xunit;
 using LlmGateway.Infrastructure;
 
 namespace LlmGateway.UnitTests;
