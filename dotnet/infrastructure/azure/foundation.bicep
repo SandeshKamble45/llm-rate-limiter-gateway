@@ -33,7 +33,9 @@ resource acr 'Microsoft.ContainerRegistry/registries@2025-04-01' = {
 }
 
 resource acrPullAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(acr.id, gatewayIdentity.properties.principalId, acrPullRoleDefinitionId)
+  // Role-assignment resource names must be computable at the start of deployment.
+  // The identity resource ID is deterministic; principalId is a runtime property.
+  name: guid(acr.id, gatewayIdentity.id, acrPullRoleDefinitionId)
   scope: acr
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', acrPullRoleDefinitionId)

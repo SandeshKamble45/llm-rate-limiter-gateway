@@ -24,7 +24,7 @@ stages:
       vmImage: ubuntu-latest
     steps:
     - task: UseDotNet@2
-      displayName: Install .NET 10 SDK
+      displayName: Install .NET 10
       inputs:
         packageType: sdk
         version: 10.0.x
@@ -40,6 +40,19 @@ stages:
     - script: dotnet test LlmGateway.sln --configuration $(buildConfiguration) --no-build --max-parallel-test-modules 2 --report-trx --results-directory "$(Agent.TempDirectory)/dotnet-tests"
       workingDirectory: dotnet
       displayName: Unit and Redis integration tests
+
+    - task: NodeTool@0
+      displayName: Install Node.js 22
+      inputs:
+        versionSpec: '22.x'
+
+    - script: npm ci
+      workingDirectory: frontend
+      displayName: Install Angular dependencies
+
+    - script: npm run build
+      workingDirectory: frontend
+      displayName: Build Angular dashboard
 
     - task: PublishTestResults@2
       condition: succeededOrFailed()

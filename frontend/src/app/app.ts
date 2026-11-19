@@ -86,7 +86,7 @@ export class App {
         this.backendReady.set(false);
         this.backendChecking.set(true);
         this.backendCheckMessage.set(
-          'The free-tier backend is waking up. Checking again automatically...'
+          'The backend is waking after inactivity. Checking again automatically...'
         );
 
         setTimeout(() => {

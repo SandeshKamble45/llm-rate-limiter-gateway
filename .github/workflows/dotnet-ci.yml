@@ -41,6 +41,21 @@ jobs:
       - name: Test (Microsoft Testing Platform)
         run: dotnet test LlmGateway.sln --configuration Release --no-build --max-parallel-test-modules 2 --report-trx --results-directory TestResults
 
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Angular dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Build Angular dashboard
+        run: npm run build
+        working-directory: frontend
+
       - name: Build container image
         run: docker build --tag llm-gateway-dotnet:ci .
 
