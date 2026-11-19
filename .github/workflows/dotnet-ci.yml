@@ -9,6 +9,10 @@ on:
       - main
       - migration/dotnet10-azure
 
+concurrency:
+  group: dotnet-ci-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
