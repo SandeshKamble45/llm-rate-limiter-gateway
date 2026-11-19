@@ -1,5 +1,7 @@
 using LlmGateway.Application.Abstractions;
 using LlmGateway.Application.Configuration;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using LlmGateway.Application.Services;
 using LlmGateway.Infrastructure;
 using LlmGateway.Api;
@@ -25,6 +27,37 @@ builder.Services.AddOptions<GatewayOptions>()
 builder.Services.AddOptions<ProviderOptions>()
     .BindConfiguration(ProviderOptions.SectionName)
     .ValidateOnStart();
+builder.Services.AddOptions<AuthenticationOptions>()
+    .BindConfiguration(AuthenticationOptions.SectionName)
+    .ValidateOnStart();
+
+var authOptions = builder.Configuration.GetSection(AuthenticationOptions.SectionName)
+    .Get<AuthenticationOptions>() ?? new AuthenticationOptions();
+if (authOptions.Enabled)
+{
+    if (string.IsNullOrWhiteSpace(authOptions.Authority) ||
+        string.IsNullOrWhiteSpace(authOptions.Audience))
+        throw new InvalidOperationException("Authentication:Authority and Authentication:Audience are required when JWT authentication is enabled.");
+
+    builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        .AddJwtBearer(options =>
+        {
+            options.Authority = authOptions.Authority;
+            options.Audience = authOptions.Audience;
+            options.RequireHttpsMetadata = true;
+            options.MapInboundClaims = false;
+        });
+    builder.Services.AddAuthorization(options =>
+    {
+        options.FallbackPolicy = new AuthorizationPolicyBuilder()
+            .RequireAuthenticatedUser()
+            .Build();
+    });
+}
+else
+{
+    builder.Services.AddAuthorization();
+}
 
 IConnectionMultiplexer redisConnection;
 var managedRedisEndpoint = builder.Configuration["Redis:Endpoint"];
@@ -67,20 +100,35 @@ builder.Services.AddScoped<GatewayService>();
 builder.Services.AddHealthChecks()
     .AddCheck<RedisHealthCheck>("redis");
 
-builder.Services.AddOpenTelemetry()
+var telemetry = builder.Services.AddOpenTelemetry()
     .ConfigureResource(resource => resource.AddService("llm-gateway-dotnet"))
-    .WithTracing(tracing => tracing
+    .WithMetrics(metrics => metrics.AddMeter(GatewayMetrics.MeterName));
+
+if (!string.IsNullOrWhiteSpace(builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"]))
+{
+    telemetry.UseAzureMonitor();
+}
+else
+{
+    telemetry.WithTracing(tracing => tracing
+        .AddAspNetCoreInstrumentation()
+        .AddHttpClientInstrumentation());
+    telemetry.WithMetrics(metrics => metrics
         .AddAspNetCoreInstrumentation()
         .AddHttpClientInstrumentation()
-        .AddOtlpExporter())
-    .WithMetrics(metrics => metrics
-        .AddMeter(GatewayMetrics.MeterName)
-        .AddAspNetCoreInstrumentation()
-        .AddHttpClientInstrumentation()
-        .AddRuntimeInstrumentation()
-        .AddOtlpExporter());
+        .AddRuntimeInstrumentation());
+
+    if (!string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]))
+    {
+        telemetry.WithTracing(tracing => tracing.AddOtlpExporter());
+        telemetry.WithMetrics(metrics => metrics.AddOtlpExporter());
+    }
+}
 
 var app = builder.Build();
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 if (app.Environment.IsDevelopment())
 {
@@ -98,8 +146,8 @@ var healthOptions = new HealthCheckOptions
             cancellationToken: context.RequestAborted);
     }
 };
-app.MapHealthChecks("/actuator/health", healthOptions);
-app.MapHealthChecks("/healthz", healthOptions);
+app.MapHealthChecks("/actuator/health", healthOptions).AllowAnonymous();
+app.MapHealthChecks("/healthz", healthOptions).AllowAnonymous();
 
 app.Run();
 
