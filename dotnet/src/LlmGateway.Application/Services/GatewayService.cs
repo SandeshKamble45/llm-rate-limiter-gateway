@@ -127,7 +127,7 @@ public sealed class GatewayService
 
         ModelPricing actualPricing;
         try { actualPricing = _pricing.GetPricing(response.ModelUsed); }
-        catch (ArgumentException ex)
+        catch (ArgumentException)
         {
             // Do not silently account usage at an unknown price. The reservation remains held.
             throw new GatewayException(502, $"Provider returned an unsupported model: {response.ModelUsed}");
