@@ -3,6 +3,7 @@ using LlmGateway.Domain;
 using Polly;
 using Polly.CircuitBreaker;
 using Polly.Timeout;
+using Polly.Retry;
 
 namespace LlmGateway.Infrastructure;
 
