@@ -16,13 +16,15 @@ public sealed class GatewayService
     private readonly IModelPricingService _pricing;
     private readonly GatewayOptions _options;
     private readonly string? _demoAccessCode;
+    private readonly GatewayMetrics _metrics;
 
     public GatewayService(
         IGatewayStateStore state,
         ILlmProvider provider,
         ITokenCounter tokenCounter,
         IModelPricingService pricing,
-        IOptions<GatewayOptions> options)
+        IOptions<GatewayOptions> options,
+        GatewayMetrics metrics)
     {
         _state = state;
         _provider = provider;
@@ -30,6 +32,7 @@ public sealed class GatewayService
         _pricing = pricing;
         _options = options.Value;
         _demoAccessCode = _options.DemoAccessCode;
+        _metrics = metrics;
     }
 
     public async Task<GatewayResponse> ProcessAsync(
@@ -49,6 +52,8 @@ public sealed class GatewayService
         try { tenantId = TenantId.Normalize(request.TenantId); }
         catch (ArgumentException ex) { throw new GatewayException(400, ex.Message); }
 
+        _metrics.RecordRequest();
+
         var model = string.IsNullOrWhiteSpace(request.Model) ? _provider.PrimaryModel : request.Model.Trim();
         if (!string.Equals(model, _provider.PrimaryModel, StringComparison.Ordinal) &&
             (string.IsNullOrWhiteSpace(_demoAccessCode) ||
@@ -58,7 +63,10 @@ public sealed class GatewayService
         // Preserve the original admission order: request count, estimated input tokens, then monetary budget.
         var requestLimit = await _state.ConsumeSlidingWindowAsync(tenantId, cancellationToken);
         if (!requestLimit.Allowed)
+        {
+            _metrics.RecordRejectedRequest("sliding-window");
             throw new GatewayException(429, "Request rate limit exceeded", requestLimit);
+        }
 
         var estimatedInputTokens = Math.Max(1, _tokenCounter.CountTokens(request.Prompt));
         if (estimatedInputTokens > _options.TokenBucketCapacity)
@@ -66,7 +74,10 @@ public sealed class GatewayService
 
         var tokenLimit = await _state.ConsumeTokenBucketAsync(tenantId, model, estimatedInputTokens, cancellationToken);
         if (!tokenLimit.Allowed)
+        {
+            _metrics.RecordRejectedRequest("token-bucket");
             throw new GatewayException(429, "Token capacity exhausted", tokenLimit);
+        }
 
         ModelPricing pricing;
         try { pricing = _pricing.GetPricing(model); }
@@ -84,6 +95,7 @@ public sealed class GatewayService
 
         var timer = Stopwatch.StartNew();
         LlmResponse response;
+        _metrics.RecordProviderCall();
         try
         {
             response = await _provider.CompleteAsync(model, request.Prompt, cancellationToken);
@@ -96,6 +108,9 @@ public sealed class GatewayService
         }
         catch (Exception)
         {
+            timer.Stop();
+            _metrics.RecordProviderFailure();
+            _metrics.RecordProviderLatency(timer.Elapsed.TotalMilliseconds);
             var settlement = await _state.SettleBudgetAsync(
                 tenantId, reservationId, 0, CancellationToken.None);
             throw new GatewayException(
@@ -108,6 +123,8 @@ public sealed class GatewayService
             timer.Stop();
         }
 
+        _metrics.RecordProviderLatency(timer.Elapsed.TotalMilliseconds);
+
         ModelPricing actualPricing;
         try { actualPricing = _pricing.GetPricing(response.ModelUsed); }
         catch (ArgumentException ex)
@@ -119,6 +136,9 @@ public sealed class GatewayService
         var actualCost = checked(
             actualPricing.CalculateInputCost(response.Usage.InputTokens) +
             actualPricing.CalculateOutputCost(response.Usage.OutputTokens));
+
+        _metrics.RecordTokens(response.Usage.TotalTokens);
+        _metrics.RecordActualCost(actualCost);
 
         var finalSettlement = await _state.SettleBudgetAsync(
             tenantId, reservationId, actualCost, cancellationToken);
