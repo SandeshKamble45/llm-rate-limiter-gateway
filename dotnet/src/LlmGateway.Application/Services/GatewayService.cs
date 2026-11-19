@@ -91,7 +91,11 @@ public sealed class GatewayService
         var reservation = await _state.ReserveBudgetAsync(
             tenantId, reservationId, estimatedReservation, cancellationToken);
         if (!reservation.Allowed)
+        {
+            if (reservation.InProgress || reservation.AlreadySettled)
+                throw new GatewayException(409, "Idempotency key is already in progress or has already been settled.", reservation);
             throw new GatewayException(402, "Daily tenant budget exceeded", reservation);
+        }
 
         var timer = Stopwatch.StartNew();
         LlmResponse response;
