@@ -29,7 +29,7 @@
 - Tenant identifiers are validated and encoded before key construction.
 - Budget and reservation keys use the same Redis Cluster hash tag, so the multi-key Lua operation remains colocated.
 - Daily reservation IDs carry the UTC date so a call crossing midnight settles against the original day's key.
-- Reservation settlement is replay-safe. This only makes the budget mutation idempotent; it is not yet a complete HTTP response replay cache for Idempotency-Key.
+- Reservation settlement is replay-safe. A same-key in-flight or completed reservation is rejected with HTTP 409, preventing duplicate provider execution. This is not yet a complete HTTP response replay cache for Idempotency-Key.
 - A cancelled or uncertain provider call leaves its reservation held because the request may have reached the provider. A reconciliation workflow is still required for abandoned reservations.
 
 ## Provider safeguards
