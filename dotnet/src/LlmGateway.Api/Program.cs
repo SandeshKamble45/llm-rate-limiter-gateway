@@ -55,7 +55,7 @@ else
 builder.Services.AddSingleton(redisConnection);
 
 builder.Services.AddSingleton<IGatewayStateStore, RedisGatewayStateStore>();
-builder.Services.AddSingleton<ITokenCounter, ApproximateTokenCounter>();
+builder.Services.AddSingleton<ITokenCounter, Cl100kTokenCounter>();
 builder.Services.AddSingleton<IModelPricingService, ModelPricingService>();
 builder.Services.AddSingleton<MockLlmProvider>();
 builder.Services.AddSingleton<FallbackLlmProvider>();
