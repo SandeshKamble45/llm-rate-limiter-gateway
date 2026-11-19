@@ -1,0 +1,49 @@
+name: .NET 10 CI
+
+on:
+  push:
+    branches:
+      - migration/dotnet10-azure
+  pull_request:
+    branches:
+      - main
+      - migration/dotnet10-azure
+
+permissions:
+  contents: read
+
+jobs:
+  build-test-container:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dotnet
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore LlmGateway.sln
+
+      - name: Build
+        run: dotnet build LlmGateway.sln --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test LlmGateway.sln --configuration Release --no-build --logger "trx;LogFileName=dotnet-tests.trx"
+
+      - name: Build container image
+        run: docker build --tag llm-gateway-dotnet:ci .
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotnet-test-results
+          path: dotnet/**/TestResults/**/*.trx
+          if-no-files-found: ignore
